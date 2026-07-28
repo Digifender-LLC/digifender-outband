@@ -1,0 +1,20 @@
+{{define "sel.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    {{template "nav" .}}
+    <main class="main">
+      <section class="page">
+        <header class="page-head">
+          <h1>System Event Log</h1>
+          <p class="lede">Recent SEL entries, newest first.</p>
+        </header>
+        {{template "partials/sel.html" .}}
+      </section>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,17 @@
+{{define "partials/power_panel.html"}}
+<div id="power-panel">
+  {{template "partials/power_status.html" .}}
+  {{if .Result}}<p class="ok" role="status">{{.Result}}</p>{{end}}
+  {{if .ErrMsg}}<p class="err" role="alert">{{.ErrMsg}}</p>{{end}}
+  <form class="power-actions"
+        hx-post="/power"
+        hx-target="#power-panel"
+        hx-swap="outerHTML"
+        onsubmit="return confirm('Send power action: ' + (event.submitter && event.submitter.value) + '?')">
+    <button class="btn" name="action" value="on" type="submit">Power on</button>
+    <button class="btn danger" name="action" value="off" type="submit">Power off</button>
+    <button class="btn warn" name="action" value="cycle" type="submit">Power cycle</button>
+    <button class="btn" name="action" value="soft" type="submit">Soft shutdown</button>
+  </form>
+</div>
+{{end}}

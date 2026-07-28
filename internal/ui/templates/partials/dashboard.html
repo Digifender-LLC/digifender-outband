@@ -1,0 +1,31 @@
+{{define "partials/dashboard.html"}}
+<div id="dashboard-inner">
+  {{if .Warming}}<p class="muted" role="status">Warming telemetry store…</p>{{end}}
+  {{if .ErrMsg}}<p class="err" role="alert">{{.ErrMsg}}</p>{{end}}
+  {{if .Info}}
+  <dl class="facts">
+    <div><dt>Manufacturer</dt><dd>{{.Info.Manufacturer}} ({{.Info.ManufacturerID}})</dd></div>
+    <div><dt>Product ID</dt><dd>{{.Info.ProductID}}</dd></div>
+    <div><dt>Firmware</dt><dd>{{.Info.FirmwareRev}}</dd></div>
+    <div><dt>Protocol</dt><dd>{{.Info.ProtocolVersion}}</dd></div>
+  </dl>
+  {{end}}
+  {{if .Power}}
+  <p class="power-line">Chassis power: <strong class="{{if .Power.IsOn}}on{{else}}off{{end}}">{{powerLabel .Power.IsOn}}</strong>
+    <span class="muted">restore {{.Power.PowerRestorePolicy}}</span>
+  </p>
+  {{end}}
+  {{if .Temps}}
+  <h2 class="subhead">Temps</h2>
+  <ul class="reading-list">
+    {{range .Temps}}<li><span>{{.Name}}</span><span class="val">{{.Value}} {{.Unit}}</span></li>{{end}}
+  </ul>
+  {{end}}
+  {{if .Fans}}
+  <h2 class="subhead">Fans</h2>
+  <ul class="reading-list">
+    {{range .Fans}}<li><span>{{.Name}}</span><span class="val">{{.Value}} {{.Unit}}</span></li>{{end}}
+  </ul>
+  {{end}}
+</div>
+{{end}}

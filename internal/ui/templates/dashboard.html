@@ -1,0 +1,30 @@
+{{define "dashboard.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    {{template "nav" .}}
+    <main class="main">
+      <section class="page" id="dashboard-page"
+        hx-get="/partials/dashboard"
+        hx-trigger="load, every 5s"
+        hx-select="#dashboard-inner"
+        hx-target="#dashboard-slot"
+        hx-swap="innerHTML"
+        hx-sync="this:replace">
+        <header class="page-head">
+          <h1>Dashboard</h1>
+          <p class="lede">Identity, power, and a few live readings from the BMC.</p>
+        </header>
+        <div id="dashboard-slot">
+          <div id="dashboard-inner" class="skeleton">
+            <p class="muted" role="status">Loading telemetry…</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,28 @@
+{{define "head"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Title}}{{.Title}} · {{end}}mIPMI</title>
+<link rel="stylesheet" href="/static/css/app.css">
+<script src="/static/vendor/htmx.min.js" defer></script>
+{{end}}
+
+{{define "nav"}}
+<header class="top">
+  <a class="brand" href="/">mIPMI</a>
+  <nav class="nav">
+    <a href="/" {{if eq .Active "dashboard"}}aria-current="page"{{end}}>Dashboard</a>
+    <a href="/power" {{if eq .Active "power"}}aria-current="page"{{end}}>Power</a>
+    <a href="/sensors" {{if eq .Active "sensors"}}aria-current="page"{{end}}>Sensors</a>
+    <a href="/metrics" {{if eq .Active "metrics"}}aria-current="page"{{end}}>Metrics</a>
+    <a href="/sel" {{if eq .Active "sel"}}aria-current="page"{{end}}>SEL</a>
+    <a href="/console" {{if eq .Active "console"}}aria-current="page"{{end}}>Console</a>
+    <a href="/kvm" {{if eq .Active "kvm"}}aria-current="page"{{end}}>KVM</a>
+  </nav>
+  <div class="top-meta">
+    <span class="host">{{.BMCHost}}</span>
+    <form method="post" action="/logout" class="inline">
+      <button type="submit" class="linkish">Logout</button>
+    </form>
+  </div>
+</header>
+{{end}}

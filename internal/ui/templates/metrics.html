@@ -1,0 +1,52 @@
+{{define "metrics.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{template "head" .}}
+  <link rel="stylesheet" href="/static/vendor/uPlot.min.css">
+  <script src="/static/vendor/uPlot.min.js" defer></script>
+  <script src="/static/js/metrics.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    {{template "nav" .}}
+    <main class="main metrics-main">
+      <section class="page">
+        <header class="page-head">
+          <h1>Metrics</h1>
+          <p class="lede">Historical sensor samples from the background collector (SQLite).</p>
+        </header>
+        <form id="metrics-form" class="metrics-controls" method="get" action="/metrics">
+          <label>
+            Range
+            <select name="range" id="metrics-range">
+              <option value="15m" {{if eq .Range "15m"}}selected{{end}}>15 minutes</option>
+              <option value="1h" {{if eq .Range "1h"}}selected{{end}}>1 hour</option>
+              <option value="6h" {{if eq .Range "6h"}}selected{{end}}>6 hours</option>
+              <option value="24h" {{if eq .Range "24h"}}selected{{end}}>24 hours</option>
+            </select>
+          </label>
+          <fieldset class="sensor-picks">
+            <legend>Sensors</legend>
+            {{range $name := .Sensors}}
+            <label class="check">
+              <input type="checkbox" name="sensor" value="{{$name}}"{{range $.Selected}}{{if eq . $name}} checked{{end}}{{end}}>
+              <span>{{$name}}</span>
+            </label>
+            {{else}}
+            <p class="muted">No samples yet — wait for the collector to poll.</p>
+            {{end}}
+          </fieldset>
+          <button class="btn primary" type="submit">Update</button>
+        </form>
+        <div id="metrics-status" class="muted" role="status"></div>
+        <div id="metrics-chart" class="metrics-chart" aria-label="Sensor history chart"></div>
+        <script type="application/json" id="metrics-bootstrap">
+          {"range":{{printf "%q" .Range}},"sensors":[{{range $i, $s := .Selected}}{{if $i}},{{end}}{{printf "%q" $s}}{{end}}]}
+        </script>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

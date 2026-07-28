@@ -1,0 +1,21 @@
+{{define "partials/power_status.html"}}
+<div id="power-status"
+     hx-get="/partials/power"
+     hx-trigger="every 4s"
+     hx-swap="outerHTML">
+  {{if .Power}}
+  <p class="power-line">Chassis power: <strong class="{{if .Power.IsOn}}on{{else}}off{{end}}">{{powerLabel .Power.IsOn}}</strong></p>
+  <ul class="muted-list">
+    <li>Restore policy: {{.Power.PowerRestorePolicy}}</li>
+    <li>Power fault: {{if .Power.PowerFault}}yes{{else}}no{{end}}</li>
+    <li>Chassis intrusion: {{if .Power.ChassisIntrusion}}active{{else}}clear{{end}}</li>
+  </ul>
+  {{else if .Warming}}
+  <p class="muted" role="status">Warming telemetry store…</p>
+  {{else if .ErrMsg}}
+  <p class="err">{{.ErrMsg}}</p>
+  {{else}}
+  <p class="muted">No status yet.</p>
+  {{end}}
+</div>
+{{end}}

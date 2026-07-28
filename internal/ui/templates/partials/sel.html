@@ -1,0 +1,29 @@
+{{define "partials/sel.html"}}
+<div id="sel-table"
+     hx-get="/partials/sel"
+     hx-trigger="every 15s"
+     hx-swap="outerHTML">
+  {{if .ErrMsg}}<p class="err" role="alert">{{.ErrMsg}}</p>{{end}}
+  {{if .Warming}}<p class="muted" role="status">Warming telemetry store…</p>{{end}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Time</th><th>Sensor</th><th>Event</th><th>Sev</th></tr>
+      </thead>
+      <tbody>
+        {{range .Entries}}
+        <tr>
+          <td class="mono">{{printf "%04x" .ID}}</td>
+          <td class="mono">{{fmtTime .Timestamp}}</td>
+          <td>{{.SensorName}}</td>
+          <td>{{.Description}}</td>
+          <td>{{.Severity}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="muted">{{if .Warming}}Waiting for collector…{{else}}No SEL entries.{{end}}</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

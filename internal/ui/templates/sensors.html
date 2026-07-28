@@ -1,0 +1,20 @@
+{{define "sensors.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="shell">
+    {{template "nav" .}}
+    <main class="main">
+      <section class="page">
+        <header class="page-head">
+          <h1>Sensors</h1>
+          <p class="lede">Full SDR sensor list from the BMC.</p>
+        </header>
+        {{template "partials/sensors.html" .}}
+      </section>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}
