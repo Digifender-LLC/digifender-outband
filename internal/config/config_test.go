@@ -17,6 +17,7 @@ func TestLoadLegacySingleHost(t *testing.T) {
 	t.Setenv("MIPMI_BMC_PASS", "secret")
 	t.Setenv("MIPMI_UI_PASS", "uipass")
 	t.Setenv("MIPMI_DEFAULT_HOST", "")
+	clearOIDCEnv(t)
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -226,5 +227,91 @@ func TestLoadHostsFileYAML(t *testing.T) {
 	}
 	if !cfg.Hosts[0].HasKVM() {
 		t.Fatal("yaml ipmi should default KVM")
+	}
+}
+
+func clearOIDCEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("MIPMI_OIDC_ISSUER", "")
+	t.Setenv("MIPMI_OIDC_CLIENT_ID", "")
+	t.Setenv("MIPMI_OIDC_CLIENT_SECRET", "")
+	t.Setenv("MIPMI_OIDC_REDIRECT_URL", "")
+}
+
+func TestAuthRequiresPasswordOrOIDC(t *testing.T) {
+	t.Setenv("MIPMI_HOSTS", "")
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("MIPMI_BMC_HOST", "10.0.0.1")
+	t.Setenv("MIPMI_BMC_USER", "admin")
+	t.Setenv("MIPMI_BMC_PASS", "secret")
+	t.Setenv("MIPMI_UI_PASS", "")
+	clearOIDCEnv(t)
+
+	_, err := config.Load(nil)
+	if err == nil {
+		t.Fatal("expected error when neither password nor OIDC configured")
+	}
+	if !strings.Contains(err.Error(), "at least one UI auth method") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestAuthPartialOIDCFails(t *testing.T) {
+	t.Setenv("MIPMI_HOSTS", "")
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("MIPMI_BMC_HOST", "10.0.0.1")
+	t.Setenv("MIPMI_BMC_USER", "admin")
+	t.Setenv("MIPMI_BMC_PASS", "secret")
+	t.Setenv("MIPMI_UI_PASS", "")
+	t.Setenv("MIPMI_OIDC_ISSUER", "https://idp.example")
+	t.Setenv("MIPMI_OIDC_CLIENT_ID", "")
+	t.Setenv("MIPMI_OIDC_CLIENT_SECRET", "")
+	t.Setenv("MIPMI_OIDC_REDIRECT_URL", "")
+
+	_, err := config.Load(nil)
+	if err == nil {
+		t.Fatal("expected partial OIDC error")
+	}
+	if !strings.Contains(err.Error(), "partially configured") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestAuthOIDCWithoutPassword(t *testing.T) {
+	t.Setenv("MIPMI_HOSTS", "")
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("MIPMI_BMC_HOST", "10.0.0.1")
+	t.Setenv("MIPMI_BMC_USER", "admin")
+	t.Setenv("MIPMI_BMC_PASS", "secret")
+	t.Setenv("MIPMI_UI_PASS", "")
+	t.Setenv("MIPMI_OIDC_ISSUER", "https://idp.example")
+	t.Setenv("MIPMI_OIDC_CLIENT_ID", "mipmi")
+	t.Setenv("MIPMI_OIDC_CLIENT_SECRET", "secret")
+	t.Setenv("MIPMI_OIDC_REDIRECT_URL", "https://mipmi.example/auth/oidc/callback")
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.OIDC.Enabled() {
+		t.Fatal("OIDC should be enabled")
+	}
+	if cfg.UIPass != "" {
+		t.Fatalf("UIPass=%q", cfg.UIPass)
+	}
+}
+
+func TestOIDCConfigEnabled(t *testing.T) {
+	off := config.OIDCConfig{}
+	if off.Enabled() {
+		t.Fatal("empty should be disabled")
+	}
+	on := config.OIDCConfig{
+		Issuer:      "https://idp.example",
+		ClientID:    "mipmi",
+		RedirectURL: "https://mipmi.example/auth/oidc/callback",
+	}
+	if !on.Enabled() {
+		t.Fatal("complete OIDC should be enabled")
 	}
 }

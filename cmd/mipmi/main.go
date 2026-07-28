@@ -54,7 +54,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, err := httpapi.New(active, gate, store, log)
+	srv, err := httpapi.New(active, gate, store, log, cfg.OIDC)
 	if err != nil {
 		log.Error("http server", "err", err)
 		os.Exit(1)

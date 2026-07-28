@@ -7,6 +7,12 @@ services:
       MIPMI_LISTEN: ":8080"
       MIPMI_UI_PASS: "${MIPMI_UI_PASS:?set MIPMI_UI_PASS}"
       MIPMI_DATA_DIR: /data
+      # Optional OIDC SSO (when set, MIPMI_UI_PASS can be break-glass only;
+      # with complete OIDC you may omit MIPMI_UI_PASS — adjust the ?set above):
+      # MIPMI_OIDC_ISSUER: "https://idp.example/realms/ops"
+      # MIPMI_OIDC_CLIENT_ID: "mipmi"
+      # MIPMI_OIDC_CLIENT_SECRET: "${MIPMI_OIDC_CLIENT_SECRET}"
+      # MIPMI_OIDC_REDIRECT_URL: "https://mipmi.example/auth/oidc/callback"
       # Legacy single-host (still works). For multi-host JSON inventory, unset these
       # and set MIPMI_HOSTS / MIPMI_DEFAULT_HOST instead — see below.
       MIPMI_BMC_HOST: "${MIPMI_BMC_HOST:-192.168.9.74}"

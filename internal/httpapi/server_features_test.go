@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"mipmi/internal/bmc"
+	"mipmi/internal/config"
 	"mipmi/internal/hosts"
 	"mipmi/internal/telemetry"
 )
@@ -45,7 +46,7 @@ func TestFeatureGates(t *testing.T) {
 		Client:   featureClient{},
 		// hasKVM left false (unexported default) → HasKVM() == false
 	}
-	srv, err := New(host, gate, store, slog.Default())
+	srv, err := New(host, gate, store, slog.Default(), config.OIDCConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

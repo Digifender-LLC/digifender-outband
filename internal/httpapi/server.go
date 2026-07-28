@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"mipmi/internal/bmc"
+	"mipmi/internal/config"
 	"mipmi/internal/hosts"
 	"mipmi/internal/kvm"
 	"mipmi/internal/telemetry"
@@ -25,6 +27,7 @@ import (
 type Server struct {
 	host     *hosts.Host
 	gate     *Gate
+	oidc     *oidcAuth
 	store    *telemetry.Store
 	kvm      *kvm.Bridge // nil when FeatureKVM is absent
 	features bmc.FeatureSet
@@ -35,7 +38,8 @@ type Server struct {
 }
 
 // New builds routes and templates bound to the active host.
-func New(host *hosts.Host, gate *Gate, store *telemetry.Store, log *slog.Logger) (*Server, error) {
+// oidcCfg may be zero; when enabled, discovery runs during construction.
+func New(host *hosts.Host, gate *Gate, store *telemetry.Store, log *slog.Logger, oidcCfg config.OIDCConfig) (*Server, error) {
 	if host == nil {
 		return nil, fmt.Errorf("httpapi: nil host")
 	}
@@ -54,9 +58,14 @@ func New(host *hosts.Host, gate *Gate, store *telemetry.Store, log *slog.Logger)
 		features |= bmc.FeatureSet(bmc.FeatureKVM)
 		bridge = kvm.NewBridge(host.Address, host.User, host.Password, host.KVMPort(), host.KVMTLS(), log)
 	}
+	oa, err := newOIDCAuth(context.Background(), oidcCfg)
+	if err != nil {
+		return nil, err
+	}
 	s := &Server{
 		host:     host,
 		gate:     gate,
+		oidc:     oa,
 		store:    store,
 		kvm:      bridge,
 		features: features,
@@ -95,6 +104,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /login", s.handleLoginPost)
 	s.mux.HandleFunc("POST /logout", s.handleLogout)
 	s.mux.HandleFunc("GET /logout", s.handleLogout)
+	s.mux.HandleFunc("GET /auth/oidc/login", s.handleOIDCLogin)
+	s.mux.HandleFunc("GET /auth/oidc/callback", s.handleOIDCCallback)
 
 	s.mux.HandleFunc("GET /{$}", s.handleDashboard)
 	s.mux.HandleFunc("GET /partials/dashboard", s.handleDashboardPartial)
@@ -125,28 +136,32 @@ func (s *Server) Handler() http.Handler {
 }
 
 type pageData struct {
-	Title       string
-	Active      string
-	BMCHost     string
-	Error       string
-	Flash       string
-	ShowPower   bool
-	ShowSensors bool
-	ShowSEL     bool
-	ShowConsole bool
-	ShowKVM     bool
+	Title           string
+	Active          string
+	BMCHost         string
+	Error           string
+	Flash           string
+	OIDCEnabled     bool
+	PasswordEnabled bool
+	ShowPower       bool
+	ShowSensors     bool
+	ShowSEL         bool
+	ShowConsole     bool
+	ShowKVM         bool
 }
 
 func (s *Server) page(title, active string) pageData {
 	return pageData{
-		Title:       title,
-		Active:      active,
-		BMCHost:     s.displayHost(),
-		ShowPower:   s.features.Has(bmc.FeaturePower),
-		ShowSensors: s.features.Has(bmc.FeatureSensors),
-		ShowSEL:     s.features.Has(bmc.FeatureSEL),
-		ShowConsole: s.features.Has(bmc.FeatureConsole),
-		ShowKVM:     s.features.Has(bmc.FeatureKVM),
+		Title:           title,
+		Active:          active,
+		BMCHost:         s.displayHost(),
+		OIDCEnabled:     s.oidc != nil,
+		PasswordEnabled: s.gate != nil && s.gate.passwordEnabled(),
+		ShowPower:       s.features.Has(bmc.FeaturePower),
+		ShowSensors:     s.features.Has(bmc.FeatureSensors),
+		ShowSEL:         s.features.Has(bmc.FeatureSEL),
+		ShowConsole:     s.features.Has(bmc.FeatureConsole),
+		ShowKVM:         s.features.Has(bmc.FeatureKVM),
 	}
 }
 
@@ -171,6 +186,10 @@ func (s *Server) handleLoginGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
+	if !s.gate.passwordEnabled() {
+		http.Error(w, "password login disabled", http.StatusNotFound)
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return

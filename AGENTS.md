@@ -36,7 +36,7 @@ Requirements: Go 1.25+, reachable BMC on UDP 623 (and TCP 7578 for KVM on AMI Ad
 export MIPMI_BMC_HOST=192.168.9.74
 export MIPMI_BMC_USER=root
 export MIPMI_BMC_PASS='...'   # BMC password — never commit
-export MIPMI_UI_PASS='...'    # UI gate password — never commit
+export MIPMI_UI_PASS='...'    # UI gate password / break-glass (or OIDC; see README) — never commit
 export MIPMI_LISTEN=:8080
 
 go run ./cmd/mipmi
@@ -53,8 +53,8 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 
 ## Conventions
 
-- **Secrets stay out of git.** No BMC passwords, UI passwords, WireGuard private keys, or session tokens in source, docs checked in as examples, or commit messages. Use env vars (`MIPMI_*`) or a local ignored file.
-- **BMC credentials are server-side only.** The browser only ever sees `MIPMI_UI_PASS`.
+- **Secrets stay out of git.** No BMC passwords, UI passwords, OIDC client secrets, WireGuard private keys, or session tokens in source, docs checked in as examples, or commit messages. Use env vars (`MIPMI_*`) or a local ignored file.
+- **BMC credentials are server-side only.** The browser authenticates with `MIPMI_UI_PASS` and/or OIDC — never with BMC credentials.
 - **Match existing style.** Prefer small, focused packages; keep HTMX partials boring and readable; avoid drive-by refactors unrelated to the task.
 - **Providers behind `bmc.Client`.** New vendor support goes through the registry — do not special-case iDRAC/AMT/IPMI in the HTTP layer.
 - **Unimplemented inventory hosts are skipped.** Stub providers (`idrac`/`amt`) return `provider.ErrNotImplemented`; `hosts.Open` warns and continues. Unknown providers and a stub `MIPMI_DEFAULT_HOST` still fail startup. At least one usable host is required.

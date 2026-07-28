@@ -64,6 +64,31 @@ func (h HostConfig) KVMEndpoint() (port int, tls bool) {
 	return port, h.KVM.TLS
 }
 
+
+// OIDCConfig holds optional OpenID Connect settings for the UI gate.
+// Enabled when Issuer, ClientID, and RedirectURL are all set. ClientSecret
+// may be empty for public clients that rely on PKCE.
+type OIDCConfig struct {
+	Issuer       string
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+}
+
+// Enabled reports whether OIDC SSO is fully configured.
+func (o OIDCConfig) Enabled() bool {
+	return strings.TrimSpace(o.Issuer) != "" &&
+		strings.TrimSpace(o.ClientID) != "" &&
+		strings.TrimSpace(o.RedirectURL) != ""
+}
+
+func (o OIDCConfig) anySet() bool {
+	return strings.TrimSpace(o.Issuer) != "" ||
+		strings.TrimSpace(o.ClientID) != "" ||
+		strings.TrimSpace(o.ClientSecret) != "" ||
+		strings.TrimSpace(o.RedirectURL) != ""
+}
+
 // Config holds process configuration. BMC credentials stay server-side.
 type Config struct {
 	Listen      string
@@ -72,6 +97,8 @@ type Config struct {
 	DefaultHost string
 
 	Hosts []HostConfig
+
+	OIDC OIDCConfig
 
 	PollSensors   time.Duration
 	PollPower     time.Duration
@@ -103,6 +130,12 @@ func Load(args []string) (*Config, error) {
 		RetentionDays: envInt("MIPMI_RETENTION_DAYS", 7),
 		KVMPort:       envInt("MIPMI_KVM_PORT", 7578),
 		KVMTLS:       envBool("MIPMI_KVM_TLS", false),
+		OIDC: OIDCConfig{
+			Issuer:       os.Getenv("MIPMI_OIDC_ISSUER"),
+			ClientID:     os.Getenv("MIPMI_OIDC_CLIENT_ID"),
+			ClientSecret: os.Getenv("MIPMI_OIDC_CLIENT_SECRET"),
+			RedirectURL:  os.Getenv("MIPMI_OIDC_REDIRECT_URL"),
+		},
 	}
 
 	// Legacy single-host defaults (used only when no inventory is provided).
@@ -116,7 +149,7 @@ func Load(args []string) (*Config, error) {
 	fs := flag.NewFlagSet("mipmi", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.StringVar(&cfg.Listen, "listen", cfg.Listen, "HTTP listen address")
-	fs.StringVar(&cfg.UIPass, "ui-pass", cfg.UIPass, "UI gate password (prefer MIPMI_UI_PASS)")
+	fs.StringVar(&cfg.UIPass, "ui-pass", cfg.UIPass, "UI gate password / break-glass (prefer MIPMI_UI_PASS)")
 	fs.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "SQLite telemetry directory (MIPMI_DATA_DIR)")
 	fs.StringVar(&cfg.DefaultHost, "default-host", cfg.DefaultHost, "Active host id (MIPMI_DEFAULT_HOST)")
 	fs.StringVar(&hostsFile, "hosts-file", hostsFile, "Path to hosts YAML/JSON (MIPMI_HOSTS_FILE)")
@@ -125,6 +158,11 @@ func Load(args []string) (*Config, error) {
 	fs.IntVar(&cfg.RetentionDays, "retention-days", cfg.RetentionDays, "telemetry retention days")
 	fs.IntVar(&cfg.KVMPort, "kvm-port", cfg.KVMPort, "AMI IVTP video port (MIPMI_KVM_PORT)")
 	fs.BoolVar(&cfg.KVMTLS, "kvm-tls", cfg.KVMTLS, "TLS on IVTP socket (MIPMI_KVM_TLS)")
+
+	fs.StringVar(&cfg.OIDC.Issuer, "oidc-issuer", cfg.OIDC.Issuer, "OIDC issuer URL (MIPMI_OIDC_ISSUER)")
+	fs.StringVar(&cfg.OIDC.ClientID, "oidc-client-id", cfg.OIDC.ClientID, "OIDC client ID (MIPMI_OIDC_CLIENT_ID)")
+	fs.StringVar(&cfg.OIDC.ClientSecret, "oidc-client-secret", cfg.OIDC.ClientSecret, "OIDC client secret (MIPMI_OIDC_CLIENT_SECRET)")
+	fs.StringVar(&cfg.OIDC.RedirectURL, "oidc-redirect-url", cfg.OIDC.RedirectURL, "OIDC redirect URL (MIPMI_OIDC_REDIRECT_URL)")
 
 	fs.StringVar(&legacyHost, "bmc-host", legacyHost, "Legacy single BMC hostname or IP")
 	fs.IntVar(&legacyPort, "bmc-port", legacyPort, "Legacy BMC IPMI UDP port")
@@ -142,8 +180,8 @@ func Load(args []string) (*Config, error) {
 	}
 	cfg.Hosts = hosts
 
-	if cfg.UIPass == "" {
-		return nil, fmt.Errorf("UI password is required (MIPMI_UI_PASS)")
+	if err := validateAuth(cfg); err != nil {
+		return nil, err
 	}
 	if cfg.RetentionDays < 1 {
 		cfg.RetentionDays = 7
@@ -152,6 +190,17 @@ func Load(args []string) (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+
+func validateAuth(cfg *Config) error {
+	if cfg.OIDC.anySet() && !cfg.OIDC.Enabled() {
+		return fmt.Errorf("OIDC is partially configured: set MIPMI_OIDC_ISSUER, MIPMI_OIDC_CLIENT_ID, and MIPMI_OIDC_REDIRECT_URL together (client secret is optional)")
+	}
+	if cfg.UIPass == "" && !cfg.OIDC.Enabled() {
+		return fmt.Errorf("at least one UI auth method is required: MIPMI_UI_PASS and/or complete OIDC (MIPMI_OIDC_ISSUER, MIPMI_OIDC_CLIENT_ID, MIPMI_OIDC_REDIRECT_URL)")
+	}
+	return nil
 }
 
 func loadHosts(hostsFile, legacyHost string, legacyPort int, legacyUser, legacyPass string, legacyCipher, kvmPort int, kvmTLS bool) ([]HostConfig, error) {

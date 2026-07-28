@@ -57,7 +57,7 @@ Provider-specific options nest under `ipmi` (e.g. `cipher_suite`) and `kvm` (e.g
 
 UI nav and telemetry follow `bmc.Capabilities` on the active host’s client. The IPMI provider advertises the control plane (power/sensors/SEL/console/identity). Providers must omit unsupported features rather than advertising them and failing at runtime.
 
-Open http://127.0.0.1:8080 and log in with `MIPMI_UI_PASS`.
+Open http://127.0.0.1:8080 and log in with `MIPMI_UI_PASS` (and/or OIDC SSO when configured).
 
 Optional:
 
@@ -65,6 +65,20 @@ Optional:
 - `MIPMI_CIPHER_SUITE` (default library choice) — legacy path; inventory uses nested `ipmi.cipher_suite`
 - `MIPMI_HOSTS_FILE` — path to a YAML or JSON hosts file
 - `MIPMI_KVM_PORT` / `MIPMI_KVM_TLS` — legacy path; inventory uses nested `kvm.port` / `kvm.tls`
+
+### UI auth (password and/or OIDC)
+
+At least one of a local UI password or complete OIDC config is required:
+
+| Env | Role |
+|-----|------|
+| `MIPMI_UI_PASS` | Shared local / break-glass password |
+| `MIPMI_OIDC_ISSUER` | IdP issuer URL (OIDC discovery) |
+| `MIPMI_OIDC_CLIENT_ID` | OIDC client ID |
+| `MIPMI_OIDC_CLIENT_SECRET` | Client secret (optional for public PKCE clients) |
+| `MIPMI_OIDC_REDIRECT_URL` | Exact callback URL, e.g. `https://mipmi.example/auth/oidc/callback` |
+
+OIDC is enabled when issuer, client ID, and redirect URL are all set. Register that redirect URL on the IdP. The login page shows **Sign in with SSO**; when `MIPMI_UI_PASS` is also set it remains available as break-glass. Session cookie is still `mipmi_session` (12h). BMC credentials never reach the browser.
 
 ## Docker
 
@@ -146,7 +160,7 @@ Theme tokens and light/dark (`data-theme`) live in `src.css`. Prefer Tailwind ut
 ## Security notes
 
 - BMC username/password stay **server-side** only.
-- The browser only sees the UI password gate (`MIPMI_UI_PASS`).
+- The browser authenticates to the UI via `MIPMI_UI_PASS` and/or OIDC SSO — never with BMC credentials.
 - No HTTPS in-app for v1 — put a reverse proxy in front or trust the LAN.
 - One SOL session per active host adapter; a second client is rejected until the first disconnects.
 

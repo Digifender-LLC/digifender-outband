@@ -17,33 +17,58 @@ const (
 	sessionTTL    = 12 * time.Hour
 )
 
-// Gate is a simple shared-password UI gate. BMC credentials never reach the browser.
+// Identity is optional operator info stored with a session (OIDC logins).
+type Identity struct {
+	Subject string
+	Email   string
+	Name    string
+}
+
+type session struct {
+	Expires  time.Time
+	Identity Identity
+}
+
+// Gate is a UI auth gate. BMC credentials never reach the browser.
+// Password and/or OIDC may be enabled; both issue the same session cookie.
 type Gate struct {
 	pass   string
 	secret []byte
 
-	mu     sync.Mutex
-	tokens map[string]time.Time
+	mu       sync.Mutex
+	sessions map[string]session
 }
 
-// NewGate creates a password gate. pass is compared with constant time.
+// NewGate creates an auth gate. pass may be empty when OIDC-only; when set it
+// is compared with constant time for break-glass / sole local login.
 func NewGate(pass string) (*Gate, error) {
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return nil, err
 	}
 	return &Gate{
-		pass:   pass,
-		secret: secret,
-		tokens: make(map[string]time.Time),
+		pass:     pass,
+		secret:   secret,
+		sessions: make(map[string]session),
 	}, nil
 }
 
+func (g *Gate) passwordEnabled() bool {
+	return g.pass != ""
+}
+
 func (g *Gate) validPassword(got string) bool {
+	if g.pass == "" {
+		return false
+	}
 	return subtle.ConstantTimeCompare([]byte(got), []byte(g.pass)) == 1
 }
 
 func (g *Gate) issueToken() (string, time.Time) {
+	return g.issueTokenFor(Identity{})
+}
+
+func (g *Gate) issueTokenFor(id Identity) (string, time.Time) {
 	raw := make([]byte, 32)
 	_, _ = rand.Read(raw)
 	mac := hmac.New(sha256.New, g.secret)
@@ -51,7 +76,7 @@ func (g *Gate) issueToken() (string, time.Time) {
 	token := hex.EncodeToString(raw) + "." + hex.EncodeToString(mac.Sum(nil))
 	exp := time.Now().Add(sessionTTL)
 	g.mu.Lock()
-	g.tokens[token] = exp
+	g.sessions[token] = session{Expires: exp, Identity: id}
 	g.mu.Unlock()
 	return token, exp
 }
@@ -62,12 +87,12 @@ func (g *Gate) checkToken(token string) bool {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	exp, ok := g.tokens[token]
+	s, ok := g.sessions[token]
 	if !ok {
 		return false
 	}
-	if time.Now().After(exp) {
-		delete(g.tokens, token)
+	if time.Now().After(s.Expires) {
+		delete(g.sessions, token)
 		return false
 	}
 	return true
@@ -75,15 +100,29 @@ func (g *Gate) checkToken(token string) bool {
 
 func (g *Gate) revoke(token string) {
 	g.mu.Lock()
-	delete(g.tokens, token)
+	delete(g.sessions, token)
 	g.mu.Unlock()
+}
+
+func authExempt(path string) bool {
+	switch path {
+	case "/login", "/logout":
+		return true
+	}
+	if strings.HasPrefix(path, "/static/") {
+		return true
+	}
+	if strings.HasPrefix(path, "/auth/oidc/") {
+		return true
+	}
+	return false
 }
 
 // Middleware redirects unauthenticated HTML requests to /login.
 func (g *Gate) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if path == "/login" || path == "/logout" || strings.HasPrefix(path, "/static/") {
+		if authExempt(path) {
 			next.ServeHTTP(w, r)
 			return
 		}

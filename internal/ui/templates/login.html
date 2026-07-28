@@ -27,15 +27,24 @@
     <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false">Theme</button>
     <main class="login-panel">
       <p class="brand hero-brand">mIPMI</p>
-      <p class="lede">BMC control for {{.BMCHost}}. Enter the UI password — BMC credentials stay on the server.</p>
+      <p class="lede">BMC control for {{.BMCHost}}. BMC credentials stay on the server.</p>
       {{if .Error}}<p class="err" role="alert">{{.Error}}</p>{{end}}
+      {{if .OIDCEnabled}}
+      <p><a class="btn primary" href="/auth/oidc/login">Sign in with SSO</a></p>
+      {{end}}
+      {{if .PasswordEnabled}}
+      {{if .OIDCEnabled}}<p class="lede">Or use the local break-glass password:</p>{{end}}
       <form method="post" action="/login" class="login-form">
         <label>
-          UI password
-          <input type="password" name="password" autocomplete="current-password" required autofocus>
+          {{if .OIDCEnabled}}Local password{{else}}UI password{{end}}
+          <input type="password" name="password" autocomplete="current-password" required {{if not .OIDCEnabled}}autofocus{{end}}>
         </label>
         <button type="submit" class="btn primary">Enter</button>
       </form>
+      {{end}}
+      {{if and (not .OIDCEnabled) (not .PasswordEnabled)}}
+      <p class="err" role="alert">No login method configured.</p>
+      {{end}}
     </main>
   </div>
 </body>
