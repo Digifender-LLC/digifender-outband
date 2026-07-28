@@ -227,16 +227,16 @@ func (a *Adapter) Sensors(ctx context.Context) ([]bmc.Sensor, error) {
 func (a *Adapter) readThermalSensors(ctx context.Context) ([]bmc.Sensor, error) {
 	var thermal struct {
 		Temperatures []struct {
-			Name            string  `json:"Name"`
-			MemberID        string  `json:"MemberId"`
-			ReadingCelsius  float64 `json:"ReadingCelsius"`
-			Status          statusObj `json:"Status"`
+			Name           string    `json:"Name"`
+			MemberID       string    `json:"MemberId"`
+			ReadingCelsius float64   `json:"ReadingCelsius"`
+			Status         statusObj `json:"Status"`
 		} `json:"Temperatures"`
 		Fans []struct {
-			Name         string  `json:"Name"`
-			MemberID     string  `json:"MemberId"`
-			Reading      float64 `json:"Reading"`
-			ReadingUnits string  `json:"ReadingUnits"`
+			Name         string    `json:"Name"`
+			MemberID     string    `json:"MemberId"`
+			Reading      float64   `json:"Reading"`
+			ReadingUnits string    `json:"ReadingUnits"`
 			Status       statusObj `json:"Status"`
 		} `json:"Fans"`
 	}

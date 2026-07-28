@@ -11,13 +11,13 @@ import (
 )
 
 func TestLoadLegacySingleHost(t *testing.T) {
-	t.Setenv("MIPMI_HOSTS", "")
-	t.Setenv("MIPMI_HOSTS_FILE", "")
-	t.Setenv("MIPMI_BMC_HOST", "10.0.0.1")
-	t.Setenv("MIPMI_BMC_USER", "admin")
-	t.Setenv("MIPMI_BMC_PASS", "secret")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "")
+	t.Setenv("OUTBAND_HOSTS", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_BMC_HOST", "10.0.0.1")
+	t.Setenv("OUTBAND_BMC_USER", "admin")
+	t.Setenv("OUTBAND_BMC_PASS", "secret")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "")
 	clearOIDCEnv(t)
 
 	cfg, err := config.Load(nil)
@@ -44,15 +44,15 @@ func TestLoadLegacySingleHost(t *testing.T) {
 }
 
 func TestLoadHostsJSONEnv(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "b")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "b")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p1"},
 		{"id":"b","name":"Second","provider":"ipmi","host":"2.2.2.2","user":"u","password":"p2",
 		 "ipmi":{"cipher_suite":3}}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -73,14 +73,14 @@ func TestLoadHostsJSONEnv(t *testing.T) {
 }
 
 func TestLoadNestedIPMIAndKVM(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p",
 		 "ipmi":{"cipher_suite":17},"kvm":{"port":8443,"tls":true}}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -97,14 +97,14 @@ func TestLoadNestedIPMIAndKVM(t *testing.T) {
 }
 
 func TestFlatCipherSuiteIgnored(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
 	// Top-level cipher_suite is unknown on HostConfig; encoding/json ignores it.
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p","cipher_suite":3}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -116,14 +116,14 @@ func TestFlatCipherSuiteIgnored(t *testing.T) {
 }
 
 func TestFlatKVMIgnored(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
 	// Flat kvm_* are unknown; IPMI still gets default kvm port 7578.
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p","kvm_port":9000,"kvm_tls":true}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -137,13 +137,13 @@ func TestFlatKVMIgnored(t *testing.T) {
 }
 
 func TestAMTDefaultPort(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"amt","host":"192.168.8.45","user":"admin","password":"p"}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 	clearOIDCEnv(t)
 
 	cfg, err := config.Load(nil)
@@ -163,13 +163,13 @@ func TestAMTDefaultPort(t *testing.T) {
 }
 
 func TestAMTTLSDefaultPort(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"amt","host":"192.168.8.45","user":"admin","password":"p","amt":{"tls":true}}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 	clearOIDCEnv(t)
 
 	cfg, err := config.Load(nil)
@@ -186,13 +186,13 @@ func TestAMTTLSDefaultPort(t *testing.T) {
 }
 
 func TestILODefaultPort(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"ilo","host":"192.168.9.90","user":"Administrator","password":"p"}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 	clearOIDCEnv(t)
 
 	cfg, err := config.Load(nil)
@@ -212,14 +212,14 @@ func TestILODefaultPort(t *testing.T) {
 }
 
 func TestILOInsecureSkipVerifyFalse(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"ilo","host":"192.168.9.90","user":"Administrator","password":"p",
 		 "ilo":{"insecure_skip_verify":false}}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 	clearOIDCEnv(t)
 
 	cfg, err := config.Load(nil)
@@ -232,14 +232,14 @@ func TestILOInsecureSkipVerifyFalse(t *testing.T) {
 }
 
 func TestNonIPMIWithoutKVM(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "d")
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "d")
 	// idrac is a registered stub; config load does not open providers.
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"d","provider":"idrac","host":"1.1.1.1","user":"u","password":"p"}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -251,14 +251,14 @@ func TestNonIPMIWithoutKVM(t *testing.T) {
 }
 
 func TestLoadSensorNames(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p",
 		 "sensor_names":{"CPU DTS value":"CPU temperature","Sys.1(CPU)":"CPU fan"}}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -277,13 +277,13 @@ func TestLoadSensorNames(t *testing.T) {
 }
 
 func TestLoadMissingUser(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"","password":"p"}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 
 	_, err := config.Load(nil)
 	if err == nil {
@@ -335,10 +335,10 @@ func TestLoadHostsFileYAML(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("MIPMI_HOSTS", "")
-	t.Setenv("MIPMI_HOSTS_FILE", path)
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "")
+	t.Setenv("OUTBAND_HOSTS", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", path)
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -354,18 +354,18 @@ func TestLoadHostsFileYAML(t *testing.T) {
 
 func clearOIDCEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("MIPMI_OIDC_ISSUER", "")
-	t.Setenv("MIPMI_OIDC_CLIENT_ID", "")
-	t.Setenv("MIPMI_OIDC_CLIENT_SECRET", "")
-	t.Setenv("MIPMI_OIDC_REDIRECT_URL", "")
+	t.Setenv("OUTBAND_OIDC_ISSUER", "")
+	t.Setenv("OUTBAND_OIDC_CLIENT_ID", "")
+	t.Setenv("OUTBAND_OIDC_CLIENT_SECRET", "")
+	t.Setenv("OUTBAND_OIDC_REDIRECT_URL", "")
 }
 
 func TestAuthRequiresPasswordOrOIDC(t *testing.T) {
-	t.Setenv("MIPMI_HOSTS", `[{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p"}]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p"}]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
 	clearOIDCEnv(t)
 
 	_, err := config.Load(nil)
@@ -378,15 +378,15 @@ func TestAuthRequiresPasswordOrOIDC(t *testing.T) {
 }
 
 func TestAuthPartialOIDCFails(t *testing.T) {
-	t.Setenv("MIPMI_HOSTS", `[{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p"}]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_OIDC_ISSUER", "https://idp.example")
-	t.Setenv("MIPMI_OIDC_CLIENT_ID", "")
-	t.Setenv("MIPMI_OIDC_CLIENT_SECRET", "")
-	t.Setenv("MIPMI_OIDC_REDIRECT_URL", "")
+	t.Setenv("OUTBAND_HOSTS", `[{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p"}]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_OIDC_ISSUER", "https://idp.example")
+	t.Setenv("OUTBAND_OIDC_CLIENT_ID", "")
+	t.Setenv("OUTBAND_OIDC_CLIENT_SECRET", "")
+	t.Setenv("OUTBAND_OIDC_REDIRECT_URL", "")
 
 	_, err := config.Load(nil)
 	if err == nil {
@@ -398,15 +398,15 @@ func TestAuthPartialOIDCFails(t *testing.T) {
 }
 
 func TestAuthOIDCWithoutPassword(t *testing.T) {
-	t.Setenv("MIPMI_HOSTS", `[{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p"}]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_OIDC_ISSUER", "https://idp.example")
-	t.Setenv("MIPMI_OIDC_CLIENT_ID", "mipmi")
-	t.Setenv("MIPMI_OIDC_CLIENT_SECRET", "secret")
-	t.Setenv("MIPMI_OIDC_REDIRECT_URL", "https://mipmi.example/auth/oidc/callback")
+	t.Setenv("OUTBAND_HOSTS", `[{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p"}]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_OIDC_ISSUER", "https://idp.example")
+	t.Setenv("OUTBAND_OIDC_CLIENT_ID", "mipmi")
+	t.Setenv("OUTBAND_OIDC_CLIENT_SECRET", "secret")
+	t.Setenv("OUTBAND_OIDC_REDIRECT_URL", "https://mipmi.example/auth/oidc/callback")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -436,14 +436,14 @@ func TestOIDCConfigEnabled(t *testing.T) {
 }
 
 func TestLoadOptionsJSON(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "d")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "d")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"d","provider":"idrac","host":"1.1.1.1","user":"u","password":"p",
 		 "options":{"DigitalOcean":{"region":"nyc3","droplet_id":123}}}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -491,10 +491,10 @@ func TestLoadOptionsYAML(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("MIPMI_HOSTS", "")
-	t.Setenv("MIPMI_HOSTS_FILE", path)
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "droplet")
+	t.Setenv("OUTBAND_HOSTS", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", path)
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "droplet")
 
 	cfg, err := config.Load(nil)
 	if err != nil {
@@ -531,15 +531,15 @@ func TestLoadOptionsYAML(t *testing.T) {
 }
 
 func TestIPMIUnchangedWithUnrelatedOptions(t *testing.T) {
-	t.Setenv("MIPMI_BMC_PASS", "")
-	t.Setenv("MIPMI_UI_PASS", "uipass")
-	t.Setenv("MIPMI_DEFAULT_HOST", "a")
-	t.Setenv("MIPMI_HOSTS", `[
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p",
 		 "ipmi":{"cipher_suite":3},
 		 "options":{"other":{"x":1}}}
 	]`)
-	t.Setenv("MIPMI_HOSTS_FILE", "")
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
 
 	cfg, err := config.Load(nil)
 	if err != nil {

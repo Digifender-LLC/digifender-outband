@@ -204,66 +204,66 @@ type Config struct {
 
 	// Global KVM defaults applied to legacy single-host inventory.
 	KVMPort int
-	KVMTLS bool
+	KVMTLS  bool
 }
 
 // Load parses flags (env as defaults) and validates required fields.
 //
 // Host inventory priority (first match wins):
-//  1. MIPMI_HOSTS — JSON array
-//  2. MIPMI_HOSTS_FILE — path to YAML or JSON file
-//  3. Legacy MIPMI_BMC_* / -bmc-* flags — one synthesized ipmi host
+//  1. OUTBAND_HOSTS — JSON array
+//  2. OUTBAND_HOSTS_FILE — path to YAML or JSON file
+//  3. Legacy OUTBAND_BMC_* / -bmc-* flags — one synthesized ipmi host
 func Load(args []string) (*Config, error) {
 	cfg := &Config{
-		Listen:        envOr("MIPMI_LISTEN", ":8080"),
-		UIPass:        os.Getenv("MIPMI_UI_PASS"),
-		DataDir:       envOr("MIPMI_DATA_DIR", "./data"),
-		DefaultHost:   os.Getenv("MIPMI_DEFAULT_HOST"),
-		PollSensors:   envDuration("MIPMI_POLL_SENSORS", 10*time.Second),
-		PollPower:     envDuration("MIPMI_POLL_POWER", 5*time.Second),
-		PollSEL:       envDuration("MIPMI_POLL_SEL", 60*time.Second),
-		PollMCInfo:    envDuration("MIPMI_POLL_MCINFO", 5*time.Minute),
-		RetentionDays: envInt("MIPMI_RETENTION_DAYS", 7),
-		KVMPort:       envInt("MIPMI_KVM_PORT", 7578),
-		KVMTLS:       envBool("MIPMI_KVM_TLS", false),
+		Listen:        envOr("OUTBAND_LISTEN", ":8080"),
+		UIPass:        os.Getenv("OUTBAND_UI_PASS"),
+		DataDir:       envOr("OUTBAND_DATA_DIR", "./data"),
+		DefaultHost:   os.Getenv("OUTBAND_DEFAULT_HOST"),
+		PollSensors:   envDuration("OUTBAND_POLL_SENSORS", 10*time.Second),
+		PollPower:     envDuration("OUTBAND_POLL_POWER", 5*time.Second),
+		PollSEL:       envDuration("OUTBAND_POLL_SEL", 60*time.Second),
+		PollMCInfo:    envDuration("OUTBAND_POLL_MCINFO", 5*time.Minute),
+		RetentionDays: envInt("OUTBAND_RETENTION_DAYS", 7),
+		KVMPort:       envInt("OUTBAND_KVM_PORT", 7578),
+		KVMTLS:        envBool("OUTBAND_KVM_TLS", false),
 		OIDC: OIDCConfig{
-			Issuer:       os.Getenv("MIPMI_OIDC_ISSUER"),
-			ClientID:     os.Getenv("MIPMI_OIDC_CLIENT_ID"),
-			ClientSecret: os.Getenv("MIPMI_OIDC_CLIENT_SECRET"),
-			RedirectURL:  os.Getenv("MIPMI_OIDC_REDIRECT_URL"),
+			Issuer:       os.Getenv("OUTBAND_OIDC_ISSUER"),
+			ClientID:     os.Getenv("OUTBAND_OIDC_CLIENT_ID"),
+			ClientSecret: os.Getenv("OUTBAND_OIDC_CLIENT_SECRET"),
+			RedirectURL:  os.Getenv("OUTBAND_OIDC_REDIRECT_URL"),
 		},
 	}
 
 	// Legacy single-host defaults (used only when no inventory is provided).
-	legacyHost := envOr("MIPMI_BMC_HOST", "192.168.9.74")
-	legacyPort := envInt("MIPMI_BMC_PORT", 623)
-	legacyUser := envOr("MIPMI_BMC_USER", "root")
-	legacyPass := os.Getenv("MIPMI_BMC_PASS")
-	legacyCipher := envInt("MIPMI_CIPHER_SUITE", -1)
-	hostsFile := os.Getenv("MIPMI_HOSTS_FILE")
+	legacyHost := envOr("OUTBAND_BMC_HOST", "192.168.9.74")
+	legacyPort := envInt("OUTBAND_BMC_PORT", 623)
+	legacyUser := envOr("OUTBAND_BMC_USER", "root")
+	legacyPass := os.Getenv("OUTBAND_BMC_PASS")
+	legacyCipher := envInt("OUTBAND_CIPHER_SUITE", -1)
+	hostsFile := os.Getenv("OUTBAND_HOSTS_FILE")
 
-	fs := flag.NewFlagSet("mipmi", flag.ContinueOnError)
+	fs := flag.NewFlagSet("outband", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.StringVar(&cfg.Listen, "listen", cfg.Listen, "HTTP listen address")
-	fs.StringVar(&cfg.UIPass, "ui-pass", cfg.UIPass, "UI gate password / break-glass (prefer MIPMI_UI_PASS)")
-	fs.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "SQLite telemetry directory (MIPMI_DATA_DIR)")
-	fs.StringVar(&cfg.DefaultHost, "default-host", cfg.DefaultHost, "Active host id (MIPMI_DEFAULT_HOST)")
-	fs.StringVar(&hostsFile, "hosts-file", hostsFile, "Path to hosts YAML/JSON (MIPMI_HOSTS_FILE)")
+	fs.StringVar(&cfg.UIPass, "ui-pass", cfg.UIPass, "UI gate password / break-glass (prefer OUTBAND_UI_PASS)")
+	fs.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "SQLite telemetry directory (OUTBAND_DATA_DIR)")
+	fs.StringVar(&cfg.DefaultHost, "default-host", cfg.DefaultHost, "Active host id (OUTBAND_DEFAULT_HOST)")
+	fs.StringVar(&hostsFile, "hosts-file", hostsFile, "Path to hosts YAML/JSON (OUTBAND_HOSTS_FILE)")
 	fs.DurationVar(&cfg.PollSensors, "poll-sensors", cfg.PollSensors, "sensor poll interval")
 	fs.DurationVar(&cfg.PollPower, "poll-power", cfg.PollPower, "power poll interval")
 	fs.IntVar(&cfg.RetentionDays, "retention-days", cfg.RetentionDays, "telemetry retention days")
-	fs.IntVar(&cfg.KVMPort, "kvm-port", cfg.KVMPort, "AMI IVTP video port (MIPMI_KVM_PORT)")
-	fs.BoolVar(&cfg.KVMTLS, "kvm-tls", cfg.KVMTLS, "TLS on IVTP socket (MIPMI_KVM_TLS)")
+	fs.IntVar(&cfg.KVMPort, "kvm-port", cfg.KVMPort, "AMI IVTP video port (OUTBAND_KVM_PORT)")
+	fs.BoolVar(&cfg.KVMTLS, "kvm-tls", cfg.KVMTLS, "TLS on IVTP socket (OUTBAND_KVM_TLS)")
 
-	fs.StringVar(&cfg.OIDC.Issuer, "oidc-issuer", cfg.OIDC.Issuer, "OIDC issuer URL (MIPMI_OIDC_ISSUER)")
-	fs.StringVar(&cfg.OIDC.ClientID, "oidc-client-id", cfg.OIDC.ClientID, "OIDC client ID (MIPMI_OIDC_CLIENT_ID)")
-	fs.StringVar(&cfg.OIDC.ClientSecret, "oidc-client-secret", cfg.OIDC.ClientSecret, "OIDC client secret (MIPMI_OIDC_CLIENT_SECRET)")
-	fs.StringVar(&cfg.OIDC.RedirectURL, "oidc-redirect-url", cfg.OIDC.RedirectURL, "OIDC redirect URL (MIPMI_OIDC_REDIRECT_URL)")
+	fs.StringVar(&cfg.OIDC.Issuer, "oidc-issuer", cfg.OIDC.Issuer, "OIDC issuer URL (OUTBAND_OIDC_ISSUER)")
+	fs.StringVar(&cfg.OIDC.ClientID, "oidc-client-id", cfg.OIDC.ClientID, "OIDC client ID (OUTBAND_OIDC_CLIENT_ID)")
+	fs.StringVar(&cfg.OIDC.ClientSecret, "oidc-client-secret", cfg.OIDC.ClientSecret, "OIDC client secret (OUTBAND_OIDC_CLIENT_SECRET)")
+	fs.StringVar(&cfg.OIDC.RedirectURL, "oidc-redirect-url", cfg.OIDC.RedirectURL, "OIDC redirect URL (OUTBAND_OIDC_REDIRECT_URL)")
 
 	fs.StringVar(&legacyHost, "bmc-host", legacyHost, "Legacy single BMC hostname or IP")
 	fs.IntVar(&legacyPort, "bmc-port", legacyPort, "Legacy BMC IPMI UDP port")
 	fs.StringVar(&legacyUser, "bmc-user", legacyUser, "Legacy BMC username")
-	fs.StringVar(&legacyPass, "bmc-pass", legacyPass, "Legacy BMC password (prefer MIPMI_BMC_PASS)")
+	fs.StringVar(&legacyPass, "bmc-pass", legacyPass, "Legacy BMC password (prefer OUTBAND_BMC_PASS)")
 	fs.IntVar(&legacyCipher, "cipher-suite", legacyCipher, "Legacy RMCP+ cipher suite ID (-1 = default)")
 
 	if err := fs.Parse(args); err != nil {
@@ -290,19 +290,19 @@ func Load(args []string) (*Config, error) {
 
 func validateAuth(cfg *Config) error {
 	if cfg.OIDC.anySet() && !cfg.OIDC.Enabled() {
-		return fmt.Errorf("OIDC is partially configured: set MIPMI_OIDC_ISSUER, MIPMI_OIDC_CLIENT_ID, and MIPMI_OIDC_REDIRECT_URL together (client secret is optional)")
+		return fmt.Errorf("OIDC is partially configured: set OUTBAND_OIDC_ISSUER, OUTBAND_OIDC_CLIENT_ID, and OUTBAND_OIDC_REDIRECT_URL together (client secret is optional)")
 	}
 	if cfg.UIPass == "" && !cfg.OIDC.Enabled() {
-		return fmt.Errorf("at least one UI auth method is required: MIPMI_UI_PASS and/or complete OIDC (MIPMI_OIDC_ISSUER, MIPMI_OIDC_CLIENT_ID, MIPMI_OIDC_REDIRECT_URL)")
+		return fmt.Errorf("at least one UI auth method is required: OUTBAND_UI_PASS and/or complete OIDC (OUTBAND_OIDC_ISSUER, OUTBAND_OIDC_CLIENT_ID, OUTBAND_OIDC_REDIRECT_URL)")
 	}
 	return nil
 }
 
 func loadHosts(hostsFile, legacyHost string, legacyPort int, legacyUser, legacyPass string, legacyCipher, kvmPort int, kvmTLS bool) ([]HostConfig, error) {
-	if raw := strings.TrimSpace(os.Getenv("MIPMI_HOSTS")); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv("OUTBAND_HOSTS")); raw != "" {
 		hosts, err := parseHostsJSON([]byte(raw))
 		if err != nil {
-			return nil, fmt.Errorf("MIPMI_HOSTS: %w", err)
+			return nil, fmt.Errorf("OUTBAND_HOSTS: %w", err)
 		}
 		return hosts, nil
 	}
@@ -316,10 +316,10 @@ func loadHosts(hostsFile, legacyHost string, legacyPort int, legacyUser, legacyP
 
 	// Legacy single-host path.
 	if strings.TrimSpace(legacyHost) == "" {
-		return nil, fmt.Errorf("BMC host is required (MIPMI_HOSTS, MIPMI_HOSTS_FILE, or MIPMI_BMC_HOST)")
+		return nil, fmt.Errorf("BMC host is required (OUTBAND_HOSTS, OUTBAND_HOSTS_FILE, or OUTBAND_BMC_HOST)")
 	}
 	if legacyPass == "" {
-		return nil, fmt.Errorf("BMC password is required (MIPMI_BMC_PASS or host inventory password)")
+		return nil, fmt.Errorf("BMC password is required (OUTBAND_BMC_PASS or host inventory password)")
 	}
 	id := sanitizeID(legacyHost)
 	cipher := legacyCipher

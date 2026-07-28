@@ -28,13 +28,13 @@ Formerly **mIPMI**; env prefix is `OUTBAND_*`, binary `outband`.
 | `internal/amiweb` | AMI MegaRAC web login / JNLP launch args |
 | `internal/kvm` | IVTP session, video decode, HID uplink, RFB bridge |
 | `internal/rfb` | Minimal RFB server for noVNC |
-| `docs/` | BMC recon, AMT, KVM protocol, provider guide |
+| `docs/` | BMC recon, [AMT](docs/amt.md), [iLO](docs/ilo.md), KVM protocol, provider guide |
 | `scripts/` | Ad-hoc verify/probe tools (`//go:build ignore`) |
 | `flake.nix` / `flake.lock` | Nix flake (`buildGoModule`, Go 1.25) |
 
 ## Run and test
 
-Requirements: Go 1.25+, reachable BMC (UDP 623 for IPMI; TCP 7578 for AMI KVM; TCP 16992 for AMT).
+Requirements: Go 1.25+, reachable BMC (UDP 623 for IPMI; TCP 7578 for AMI KVM; TCP 16992 for AMT; HTTPS 443 for iLO).
 
 ```bash
 export OUTBAND_BMC_HOST=192.168.9.74
@@ -60,10 +60,10 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 - **Secrets stay out of git.** No BMC passwords, UI passwords, OIDC client secrets, WireGuard private keys, or session tokens in source, docs checked in as examples, or commit messages. Use env vars (`OUTBAND_*`) or a local ignored file.
 - **BMC credentials are server-side only.** The browser authenticates with `OUTBAND_UI_PASS` and/or OIDC — never with BMC credentials.
 - **Match existing style.** Prefer small, focused packages; keep HTMX partials boring and readable; avoid drive-by refactors unrelated to the task.
-- **Providers behind `bmc.Client`.** New vendor support goes through the registry — do not special-case iDRAC/AMT/IPMI in the HTTP layer.
+- **Providers behind `bmc.Client`.** New vendor support goes through the registry — do not special-case iDRAC/AMT/IPMI/iLO in the HTTP layer.
 - **Unimplemented inventory hosts are skipped.** Stub providers return `provider.ErrNotImplemented`; `hosts.Open` warns and continues. Unknown providers and a stub `OUTBAND_DEFAULT_HOST` still fail startup. At least one usable host is required.
-- **Capabilities drive UI and polling.** Implement `bmc.Capabilities` and omit unsupported bits (`FeatureConsole`, etc.). HTTP nav/routes and the telemetry collector consult `bmc.ClientFeatures`; missing features are hidden / skipped (501 if hit directly). IPMI advertises the control plane only; **`FeatureKVM` comes from inventory `kvm` config** on the active host. SOL is via optional `bmc.Console` (advertised with `FeatureConsole`), not part of `bmc.Client`.
-- **Provider-specific inventory options** nest under `ipmi` / `kvm` / `amt` on each host. Do not put vendor knobs on the shared top-level host fields.
+- **Capabilities drive UI and polling.** Implement `bmc.Capabilities` and omit unsupported bits (`FeatureConsole`, etc.). HTTP nav/routes and the telemetry collector consult `bmc.ClientFeatures`; missing features are hidden / skipped (501 if hit directly). IPMI advertises the control plane only; AMT/iLO advertise power/sensors/SEL/identity (no console/KVM yet). **`FeatureKVM` comes from inventory `kvm` config** on the active host (AMI IVTP — do not enable on AMT/iLO hosts). SOL is via optional `bmc.Console` (advertised with `FeatureConsole`), not part of `bmc.Client`.
+- **Provider-specific inventory options** nest under `ipmi` / `kvm` / `amt` / `ilo` on each host. Do not put vendor knobs on the shared top-level host fields.
 - **Host-keyed telemetry.** Store and collector keys are host IDs; the UI still binds one active host for now.
 - **One SOL session / one KVM session** per process (or per active host adapter). Second clients should get a clear busy/conflict response.
 - **Tests.** Prefer table-driven unit tests next to the package (`*_test.go`). Do not require a live BMC for `go test ./...`.
@@ -86,6 +86,6 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 ## Out of scope (for now)
 
 - Multi-BMC fleet UI (inventory exists; UI is still single active host)
-- Real iDRAC / iLO providers (stubs / planned only)
+- Real iDRAC provider (stub only); AMT/iLO console and KVM redirection
 - In-process HTTPS termination (reverse proxy or LAN trust)
 - Committing private network or credential material

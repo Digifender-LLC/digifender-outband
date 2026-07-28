@@ -4,7 +4,7 @@
 
 Outband is a Go + HTMX control plane for out-of-band server management. Power, sensors, SEL, serial console, and KVM — without Java applets, vendor portals, or BMC passwords in the browser.
 
-IPMI today. AMT shipping. iDRAC / iLO next. One UI, provider-agnostic internals.
+IPMI, AMT, and iLO shipping. iDRAC next. One UI, provider-agnostic internals.
 
 [Quick start](#quick-start) · [Features](#features) · [Providers](#providers) · [Deploy](#deploy) · [Docs](#docs)
 
@@ -24,7 +24,7 @@ go run ./cmd/outband
 
 Open http://127.0.0.1:8080 and sign in with `OUTBAND_UI_PASS`.
 
-**Requirements:** Go 1.25+, a reachable BMC (IPMI UDP 623, and/or AMT TCP 16992; AMI KVM TCP 7578 when used).
+**Requirements:** Go 1.25+, a reachable BMC (IPMI UDP 623, AMT TCP 16992, and/or iLO HTTPS 443; AMI KVM TCP 7578 when used).
 
 ---
 
@@ -78,7 +78,7 @@ go run ./cmd/outband
 
 Priority: `OUTBAND_HOSTS` (JSON) → `OUTBAND_HOSTS_FILE` (YAML/JSON) → legacy `OUTBAND_BMC_*`.
 
-Provider options nest under `ipmi` / `kvm` / `amt`. IPMI hosts without a `kvm` block still enable AMI KVM by default (port 7578). Optional per-host `sensor_names` maps SDR names to UI labels (see [`hosts.example.yaml`](hosts.example.yaml)). Capabilities on the active client drive nav and telemetry.
+Provider options nest under `ipmi` / `kvm` / `amt` / `ilo`. IPMI hosts without a `kvm` block still enable AMI KVM by default (port 7578); do not attach AMI `kvm` to AMT or iLO hosts. Optional per-host `sensor_names` maps SDR names to UI labels (see [`hosts.example.yaml`](hosts.example.yaml)). Capabilities on the active client drive nav and telemetry.
 
 ---
 
@@ -148,6 +148,7 @@ Session cookie: `outband_session` (12h). BMC credentials never reach the browser
 | [AGENTS.md](AGENTS.md) | Contributor / agent guide |
 | [docs/bmc-recon.md](docs/bmc-recon.md) | Reference BMC notes |
 | [docs/amt.md](docs/amt.md) | Intel AMT |
+| [docs/ilo.md](docs/ilo.md) | HPE iLO Redfish |
 | [docs/kvm-protocol.md](docs/kvm-protocol.md) | AMI IVTP / Adviser wire format |
 | [docs/providers.md](docs/providers.md) | Writing a host provider |
 

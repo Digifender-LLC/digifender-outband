@@ -1,6 +1,6 @@
 # Writing a host provider
 
-mIPMI talks to backends through `bmc.Client`. New backends (cloud APIs, on-host agents, vendor BMCs) are **in-tree Go packages** that register a factory and are blank-imported into `cmd/mipmi`. There is no runtime plugin loader.
+Outband talks to backends through `bmc.Client`. New backends (cloud APIs, on-host agents, vendor BMCs) are **in-tree Go packages** that register a factory and are blank-imported into `cmd/outband`. There is no runtime plugin loader.
 
 ## Contract
 
@@ -32,10 +32,10 @@ provider.Register("myprovider", func(cfg config.HostConfig) (bmc.Client, error) 
 
 1. Create `internal/myprovider/` (copy [`internal/examplehost`](../internal/examplehost/) as a starting point).
 2. Register in `init()` via `provider.Register`.
-3. Blank-import from [`cmd/mipmi/main.go`](../cmd/mipmi/main.go):
+3. Blank-import from [`cmd/outband/main.go`](../cmd/outband/main.go):
 
 ```go
-_ "mipmi/internal/myprovider"
+_ "outband/internal/myprovider"
 ```
 
 4. Add table-driven unit tests next to the package. Do not require a live BMC for `go test ./...`.
@@ -50,6 +50,8 @@ Shipping providers use **typed nests**:
 
 - `ipmi:` — e.g. `cipher_suite`
 - `kvm:` — AMI Adviser/IVTP (`port`, `tls`); presence enables KVM in the UI
+- `amt:` — e.g. `tls` (see [amt.md](amt.md))
+- `ilo:` — e.g. `insecure_skip_verify` (see [ilo.md](ilo.md))
 
 Experimental or new in-tree providers should use the opaque **`options`** map keyed by provider name (JSON object per key). Decode with `cfg.ProviderOptions("myprovider")`.
 
