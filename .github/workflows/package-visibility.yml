@@ -1,0 +1,33 @@
+name: Package visibility
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Container"]
+    types: [completed]
+
+permissions:
+  packages: write
+
+jobs:
+  make-public:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set GHCR package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER}"
+          name_lc="$(printf '%s' "${GITHUB_REPOSITORY#*/}" | tr '[:upper:]' '[:lower:]')"
+          if gh api --method PUT "user/packages/container/${name_lc}/visibility" -f visibility=public; then
+            echo "user package ${name_lc} -> public"
+            exit 0
+          fi
+          if gh api --method PUT "orgs/${owner}/packages/container/${name_lc}/visibility" -f visibility=public; then
+            echo "org package ${name_lc} -> public"
+            exit 0
+          fi
+          echo "::error::Failed to set package visibility"
+          exit 1

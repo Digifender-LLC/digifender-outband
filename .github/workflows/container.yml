@@ -44,6 +44,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=alpha,enable=${{ contains(github.ref_name, 'alpha') }}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=sha,prefix=,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -54,26 +56,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      # GHCR packages default to private even for public repos.
-      - name: Ensure package is public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          owner="${GITHUB_REPOSITORY_OWNER}"
-          name="${GITHUB_REPOSITORY#*/}"
-          name_lc="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
-          # User-owned packages
-          if gh api --method PUT "user/packages/container/${name_lc}/visibility" \
-              -f visibility=public >/dev/null 2>&1; then
-            echo "Set user package ${name_lc} visibility=public"
-            exit 0
-          fi
-          # Org-owned packages
-          if gh api --method PUT "orgs/${owner}/packages/container/${name_lc}/visibility" \
-              -f visibility=public >/dev/null 2>&1; then
-            echo "Set org package ${name_lc} visibility=public"
-            exit 0
-          fi
-          echo "::warning::Could not set package visibility via API; set it manually in GitHub Packages settings."
