@@ -162,6 +162,33 @@ func TestAMTDefaultPort(t *testing.T) {
 	}
 }
 
+func TestAMTKVMNest(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"amt","host":"192.168.8.45","user":"admin","password":"p","amt":{"kvm":{}}}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	if !h.HasAMTKVM() || !h.HasKVM() {
+		t.Fatal("amt.kvm nest must enable HasAMTKVM/HasKVM")
+	}
+	if h.HasAMIKVM() {
+		t.Fatal("must not treat as AMI kvm")
+	}
+	port, tls := h.AMTKVMEndpoint()
+	if port != 16994 || tls {
+		t.Fatalf("endpoint port=%d tls=%v want 16994 false", port, tls)
+	}
+}
+
 func TestAMTTLSDefaultPort(t *testing.T) {
 	t.Setenv("OUTBAND_BMC_PASS", "")
 	t.Setenv("OUTBAND_UI_PASS", "uipass")
@@ -206,8 +233,33 @@ func TestILODefaultPort(t *testing.T) {
 	if !h.ILOInsecureSkipVerify() {
 		t.Fatal("insecure_skip_verify should default true")
 	}
-	if h.HasKVM() {
-		t.Fatal("ilo without kvm must not HasKVM")
+	// iLO enables remote console / KVM by default (ilo.remote_console).
+	if !h.HasKVM() || !h.ILORemoteConsole() {
+		t.Fatal("ilo should default HasKVM via remote console")
+	}
+	if h.HasAMIKVM() || h.HasAMTKVM() {
+		t.Fatal("ilo must not set AMI/AMT kvm nests by default")
+	}
+}
+
+func TestILORemoteConsoleDisabled(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"ilo","host":"192.168.9.90","user":"Administrator","password":"p",
+		 "ilo":{"remote_console":false}}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	if h.HasKVM() || h.ILORemoteConsole() {
+		t.Fatal("remote_console:false must disable HasKVM")
 	}
 }
 
@@ -231,11 +283,138 @@ func TestILOInsecureSkipVerifyFalse(t *testing.T) {
 	}
 }
 
+func TestIDRACDefaultPort(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"idrac","host":"192.168.9.100","user":"root","password":"p"}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	if h.Port != 443 {
+		t.Fatalf("port=%d want 443", h.Port)
+	}
+	if !h.IDRACInsecureSkipVerify() {
+		t.Fatal("insecure_skip_verify should default true")
+	}
+	if h.IDRACTransport() != "" {
+		t.Fatalf("transport=%q want empty (auto)", h.IDRACTransport())
+	}
+	if h.HasKVM() {
+		t.Fatal("idrac without kvm must not HasKVM")
+	}
+}
+
+func TestIDRACTransportOption(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"idrac","host":"192.168.9.100","user":"root","password":"p",
+		 "idrac":{"transport":"web","insecure_skip_verify":true}}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Hosts[0].IDRACTransport() != "web" {
+		t.Fatalf("transport=%q", cfg.Hosts[0].IDRACTransport())
+	}
+}
+
+func TestLoadFeatureFlags(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"amt","host":"1.1.1.1","user":"admin","password":"p",
+		 "features":{"sensors":false,"sel":true}}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	if !h.FeatureDisabled("sensors") {
+		t.Fatal("expected sensors disabled")
+	}
+	if h.FeatureDisabled("sel") {
+		t.Fatal("sel:true must not disable")
+	}
+	if h.FeatureDisabled("power") {
+		t.Fatal("omitted power must not disable")
+	}
+}
+
+func TestLoadFeatureFlagsYAML(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "amt")
+	t.Setenv("OUTBAND_HOSTS", "")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts.yaml")
+	body := `
+- id: amt
+  provider: amt
+  host: 192.168.8.45
+  user: admin
+  password: p
+  features:
+    sensors: false
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OUTBAND_HOSTS_FILE", path)
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Hosts[0].FeatureDisabled("sensors") {
+		t.Fatal("expected sensors disabled from YAML")
+	}
+}
+
+func TestIDRACInsecureSkipVerifyFalse(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"idrac","host":"192.168.9.100","user":"root","password":"p",
+		 "idrac":{"insecure_skip_verify":false}}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Hosts[0].IDRACInsecureSkipVerify() {
+		t.Fatal("insecure_skip_verify should be false")
+	}
+}
+
 func TestNonIPMIWithoutKVM(t *testing.T) {
 	t.Setenv("OUTBAND_BMC_PASS", "")
 	t.Setenv("OUTBAND_UI_PASS", "uipass")
 	t.Setenv("OUTBAND_DEFAULT_HOST", "d")
-	// idrac is a registered stub; config load does not open providers.
+	// idrac is a real provider; config load does not open providers.
 	t.Setenv("OUTBAND_HOSTS", `[
 		{"id":"d","provider":"idrac","host":"1.1.1.1","user":"u","password":"p"}
 	]`)
@@ -554,5 +733,87 @@ func TestIPMIUnchangedWithUnrelatedOptions(t *testing.T) {
 	}
 	if _, ok := h.ProviderOptions("other"); !ok {
 		t.Fatal("expected unrelated options preserved")
+	}
+}
+
+func TestRejectAMIKVMOnNonIPMI(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"amt","host":"192.168.8.45","user":"admin","password":"p",
+		 "kvm":{"port":7578}}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	_, err := config.Load(nil)
+	if err == nil {
+		t.Fatal("expected error for AMI kvm on amt host")
+	}
+	if !strings.Contains(err.Error(), "top-level kvm") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRejectConflictingKVMBackends(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	// IPMI defaults AMI kvm; adding amt.kvm is a conflict.
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p",
+		 "amt":{"kvm":{}}}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	_, err := config.Load(nil)
+	if err == nil {
+		t.Fatal("expected error for conflicting kvm backends")
+	}
+	if !strings.Contains(err.Error(), "conflicting KVM") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRejectAMTKVMOnNonAMT(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"idrac","host":"1.1.1.1","user":"u","password":"p",
+		 "amt":{"kvm":{}}}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	_, err := config.Load(nil)
+	if err == nil {
+		t.Fatal("expected error for amt.kvm on idrac host")
+	}
+	if !strings.Contains(err.Error(), "amt.kvm") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRejectILOWithAMIKVM(t *testing.T) {
+	t.Setenv("OUTBAND_BMC_PASS", "")
+	t.Setenv("OUTBAND_UI_PASS", "uipass")
+	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
+	t.Setenv("OUTBAND_HOSTS", `[
+		{"id":"a","provider":"ilo","host":"192.168.9.90","user":"Administrator","password":"p",
+		 "kvm":{"port":7578}}
+	]`)
+	t.Setenv("OUTBAND_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	_, err := config.Load(nil)
+	if err == nil {
+		t.Fatal("expected error for ilo + AMI kvm")
+	}
+	// Either mutual exclusion or provider-mismatch for top-level kvm.
+	if !strings.Contains(err.Error(), "kvm") {
+		t.Fatalf("err=%v", err)
 	}
 }

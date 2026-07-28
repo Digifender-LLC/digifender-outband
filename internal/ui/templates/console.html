@@ -9,7 +9,7 @@
   <script src="/static/js/console.js" defer></script>
 </head>
 <body>
-  <div class="app">
+  <div class="app" data-ws-url="{{.WSURL}}">
     {{template "sidebar" .}}
     {{template "topbar" .}}
     <main class="content bleed">

@@ -1,7 +1,7 @@
 {{define "partials/sel.html"}}
 <div id="sel-table"
      class="panel"
-     hx-get="/partials/sel"
+     hx-get="{{.HostBase}}/partials/sel"
      hx-trigger="every 15s"
      hx-swap="outerHTML">
   {{if .ErrMsg}}<p class="err" role="alert">{{.ErrMsg}}</p>{{end}}

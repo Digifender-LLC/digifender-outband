@@ -29,6 +29,7 @@
       <p class="muted">No power status yet.</p>
       {{end}}
     </div>
+    {{if .ShowSensors}}
     <div class="panel">
       <h2 class="subhead">Temps</h2>
       {{if .Temps}}
@@ -49,6 +50,7 @@
       <p class="muted">No fan readings.</p>
       {{end}}
     </div>
+    {{end}}
   </div>
 </div>
 {{end}}

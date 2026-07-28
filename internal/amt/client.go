@@ -54,7 +54,7 @@ func New(cfg Config) *Adapter {
 	return &Adapter{cfg: cfg, ws: newWSMAN(cfg)}
 }
 
-// Features reports the AMT adapter capability set (no console/KVM in v1).
+// Features reports the AMT adapter capability set (KVM is inventory-gated via amt.kvm).
 func (a *Adapter) Features() bmc.FeatureSet {
 	return bmc.FeatureSet(bmc.FeaturePower | bmc.FeatureSensors | bmc.FeatureSEL | bmc.FeatureIdentity)
 }

@@ -15,8 +15,9 @@ import (
 	"outband/internal/provider"
 	"outband/internal/telemetry"
 
-	// Register BMC providers (ipmi, amt, ilo; idrac stub in provider).
+	// Register BMC providers (ipmi, amt, ilo, idrac).
 	_ "outband/internal/amt"
+	_ "outband/internal/idrac"
 	_ "outband/internal/ilo"
 	_ "outband/internal/ipmi"
 )
@@ -41,8 +42,6 @@ func main() {
 	}
 	defer registry.Close()
 
-	active := registry.Default()
-
 	store, err := telemetry.Open(cfg.DataDir)
 	if err != nil {
 		log.Error("telemetry store", "err", err)
@@ -56,7 +55,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, err := httpapi.New(active, gate, store, log, cfg.OIDC)
+	srv, err := httpapi.New(registry, gate, store, log, cfg.OIDC)
 	if err != nil {
 		log.Error("http server", "err", err)
 		os.Exit(1)
@@ -65,21 +64,28 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	collector := &telemetry.Collector{
-		HostID: active.ID,
-		Client: active.Client,
-		Store:  store,
-		Intervals: telemetry.PollIntervals{
-			Sensors: cfg.PollSensors,
-			Power:   cfg.PollPower,
-			SEL:     cfg.PollSEL,
-			MCInfo:  cfg.PollMCInfo,
-		},
-		Retention:    time.Duration(cfg.RetentionDays) * 24 * time.Hour,
-		Log:          log,
-		RenameSensor: active.RenameSensor,
+	intervals := telemetry.PollIntervals{
+		Sensors: cfg.PollSensors,
+		Power:   cfg.PollPower,
+		SEL:     cfg.PollSEL,
+		MCInfo:  cfg.PollMCInfo,
 	}
-	go collector.Run(ctx)
+	retention := time.Duration(cfg.RetentionDays) * 24 * time.Hour
+	for _, h := range registry.All() {
+		host := h
+		feats := host.Features()
+		collector := &telemetry.Collector{
+			HostID:       host.ID,
+			Client:       host.Client,
+			Store:        store,
+			Intervals:    intervals,
+			Retention:    retention,
+			Log:          log,
+			RenameSensor: host.RenameSensor,
+			Features:     &feats,
+		}
+		go collector.Run(ctx)
+	}
 
 	httpServer := &http.Server{
 		Addr:              cfg.Listen,
@@ -87,12 +93,13 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	def := registry.Default()
 	go func() {
 		log.Info("Outband listening",
 			"addr", cfg.Listen,
-			"host", active.ID,
-			"provider", active.Provider,
-			"bmc", active.Address,
+			"default_host", def.ID,
+			"provider", def.Provider,
+			"bmc", def.Address,
 			"hosts", len(registry.All()),
 			"data", cfg.DataDir,
 		)

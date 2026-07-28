@@ -33,7 +33,9 @@
   }
 
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(proto + "//" + location.host + "/ws/sol");
+  const root = document.querySelector("[data-ws-url]");
+  const wsPath = (root && root.getAttribute("data-ws-url")) || "/ws/sol";
+  const ws = new WebSocket(proto + "//" + location.host + wsPath);
   ws.binaryType = "arraybuffer";
 
   ws.onopen = function () {

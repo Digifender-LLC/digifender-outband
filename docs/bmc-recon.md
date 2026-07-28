@@ -29,7 +29,7 @@ Target used during Outband development.
 
 ## Out of scope (current)
 
-- Multi-BMC **fleet UI** (host picker / per-host routes) — inventory + host-keyed internals exist; UI still binds one active host
-- Real iDRAC provider (stub registered only); AMT/iLO SOL/KVM not yet implemented — see [amt.md](amt.md), [ilo.md](ilo.md)
+- Multi-BMC **fleet overview** (all-hosts dashboard) — URL-scoped per-host UI (`/h/{id}/…`) and topbar picker exist; no aggregate fleet page yet
+- iDRAC console / KVM (multi-gen Redfish/web/WS-MAN control plane — see [idrac.md](idrac.md)); AMT SOL and iLO VSP not yet implemented — see [amt.md](amt.md), [amt-kvm.md](amt-kvm.md), [ilo.md](ilo.md), [ilo-kvm.md](ilo-kvm.md)
 - HTTPS termination inside Outband (use reverse proxy or LAN trust)
 - KMCrypt / encrypted HID and some Adviser control opcodes (see KVM TODOs in `internal/kvm`)

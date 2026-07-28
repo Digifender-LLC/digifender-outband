@@ -38,6 +38,9 @@ type Collector struct {
 	Log       *slog.Logger
 	// RenameSensor optionally maps SDR sensor names to display labels before storage.
 	RenameSensor func(string) string
+	// Features, when non-nil, is the effective capability set (inventory overrides applied).
+	// When nil, capabilities come from ClientFeatures(Client).
+	Features *bmc.FeatureSet
 }
 
 // Run blocks until ctx is cancelled. It performs an immediate warm poll first.
@@ -69,6 +72,9 @@ func (c *Collector) Run(ctx context.Context) {
 	}
 
 	features := bmc.ClientFeatures(c.Client)
+	if c.Features != nil {
+		features = *c.Features
+	}
 
 	_ = c.Store.LoadSnapshots(c.HostID)
 

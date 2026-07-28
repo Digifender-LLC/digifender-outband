@@ -5,6 +5,13 @@
 #   go run ./cmd/outband
 #
 # sensor_names maps exact BMC/SDR names → human-readable UI / telemetry labels.
+# features: set sensors/sel/power/console to false to hide nav and skip polling
+# (useful for AMT hosts with empty/no numeric sensors or SEL).
+#
+# KVM nests are mutually exclusive per host:
+#   top-level kvm:     AMI IVTP (IPMI hosts only)
+#   amt.kvm:           AMT Hardware-KVM
+#   ilo.remote_console: iLO IRC (default on for provider ilo)
 
 - id: tyan
   name: Tyan BMC
@@ -41,3 +48,45 @@
     Sys.5(Rear 2): Rear fan 2
     PSU1 Present: PSU 1 present
     PSU2 Present: PSU 2 present
+
+- id: amt
+  name: Intel AMT
+  provider: amt
+  host: 192.168.8.45
+  port: 16992
+  user: admin
+  password: "CHANGE_ME"
+  amt:
+    kvm: {} # Hardware-KVM via redirection 16994; see docs/amt-kvm.md
+  # AMT often has no useful numeric sensors / SEL — hide empty UI panels:
+  features:
+    sensors: false
+    sel: false
+
+- id: ilo
+  name: HPE iLO
+  provider: ilo
+  host: 192.168.9.90
+  port: 443
+  user: Administrator
+  password: "CHANGE_ME"
+  ilo:
+    # remote_console defaults true; set false to disable IRC/KVM
+    # remote_console: false
+    insecure_skip_verify: true
+
+- id: idrac
+  name: Dell iDRAC
+  provider: idrac
+  host: 192.168.9.100
+  port: 443
+  user: root
+  password: "CHANGE_ME"
+  idrac:
+    # auto|redfish|wsman|web — auto probes Redfish → web → WS-MAN
+    # transport: auto
+    insecure_skip_verify: true
+  # Classic web (iDRAC6/7) already omits FeatureSEL in-code; for other
+  # platforms with empty SEL you can still hide it:
+  # features:
+  #   sel: false

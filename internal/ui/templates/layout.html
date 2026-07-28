@@ -24,15 +24,15 @@
 
 {{define "sidebar"}}
 <aside class="sidebar" id="app-sidebar" aria-label="Primary">
-  <a class="sidebar-brand" href="/"><img class="brand-mark" src="/static/img/outband.svg" width="22" height="22" alt="">Outband</a>
+  <a class="sidebar-brand" href="{{.HostBase}}/"><img class="brand-mark" src="/static/img/outband.svg" width="22" height="22" alt="">Outband</a>
   <nav class="sidebar-nav">
-    <a href="/" {{if eq .Active "dashboard"}}aria-current="page"{{end}}>Dashboard</a>
-    {{if .ShowPower}}<a href="/power" {{if eq .Active "power"}}aria-current="page"{{end}}>Power</a>{{end}}
-    {{if .ShowSensors}}<a href="/sensors" {{if eq .Active "sensors"}}aria-current="page"{{end}}>Sensors</a>{{end}}
-    {{if .ShowSensors}}<a href="/metrics" {{if eq .Active "metrics"}}aria-current="page"{{end}}>Metrics</a>{{end}}
-    {{if .ShowSEL}}<a href="/sel" {{if eq .Active "sel"}}aria-current="page"{{end}}>SEL</a>{{end}}
-    {{if .ShowConsole}}<a href="/console" {{if eq .Active "console"}}aria-current="page"{{end}}>Console</a>{{end}}
-    {{if .ShowKVM}}<a href="/kvm" {{if eq .Active "kvm"}}aria-current="page"{{end}}>KVM</a>{{end}}
+    <a href="{{.HostBase}}/" {{if eq .Active "dashboard"}}aria-current="page"{{end}}>Dashboard</a>
+    {{if .ShowPower}}<a href="{{.HostBase}}/power" {{if eq .Active "power"}}aria-current="page"{{end}}>Power</a>{{end}}
+    {{if .ShowSensors}}<a href="{{.HostBase}}/sensors" {{if eq .Active "sensors"}}aria-current="page"{{end}}>Sensors</a>{{end}}
+    {{if .ShowSensors}}<a href="{{.HostBase}}/metrics" {{if eq .Active "metrics"}}aria-current="page"{{end}}>Metrics</a>{{end}}
+    {{if .ShowSEL}}<a href="{{.HostBase}}/sel" {{if eq .Active "sel"}}aria-current="page"{{end}}>SEL</a>{{end}}
+    {{if .ShowConsole}}<a href="{{.HostBase}}/console" {{if eq .Active "console"}}aria-current="page"{{end}}>Console</a>{{end}}
+    {{if .ShowKVM}}<a href="{{.HostBase}}/kvm" {{if eq .Active "kvm"}}aria-current="page"{{end}}>KVM</a>{{end}}
   </nav>
   <div class="sidebar-footer">
     <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" aria-label="Switch theme" title="Switch theme">
@@ -49,7 +49,18 @@
 {{define "topbar"}}
 <header class="topbar">
   <button type="button" class="menu-toggle" data-drawer-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Open navigation">☰</button>
+  {{if gt (len .Hosts) 1}}
+  <label class="topbar-host-picker">
+    <span class="sr-only">Active host</span>
+    <select class="topbar-host-select" data-host-select aria-label="Active host" title="{{.BMCHost}}">
+      {{range .Hosts}}
+      <option value="{{.ID}}" {{if eq .ID $.HostID}}selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+  </label>
+  {{else}}
   <span class="topbar-host" title="{{.BMCHost}}">{{.BMCHost}}</span>
+  {{end}}
 </header>
 <button type="button" class="sidebar-backdrop" data-drawer-close aria-label="Close navigation" tabindex="-1"></button>
 {{end}}

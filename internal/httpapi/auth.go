@@ -128,7 +128,7 @@ func (g *Gate) Middleware(next http.Handler) http.Handler {
 		}
 		c, err := r.Cookie(sessionCookie)
 		if err != nil || !g.checkToken(c.Value) {
-			if isHTMX(r) || wantsJSON(r) || strings.HasPrefix(path, "/ws/") {
+			if isHTMX(r) || wantsJSON(r) || strings.Contains(path, "/ws/") {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
@@ -166,5 +166,5 @@ func isHTMX(r *http.Request) bool {
 }
 
 func wantsJSON(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, "/api/")
+	return strings.Contains(r.URL.Path, "/api/")
 }

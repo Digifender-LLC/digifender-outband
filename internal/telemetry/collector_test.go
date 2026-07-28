@@ -107,3 +107,61 @@ func TestCollectorSkipsUnsupportedFeatures(t *testing.T) {
 		t.Fatalf("sel polls = %d, want 0", n)
 	}
 }
+
+func TestCollectorHonorsFeatureOverride(t *testing.T) {
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	client := &countingClient{
+		features: bmc.FeatureSet(bmc.FeaturePower | bmc.FeatureSensors | bmc.FeatureIdentity),
+	}
+	// Inventory-style override: drop sensors even though client advertises them.
+	override := bmc.FeatureSet(bmc.FeaturePower | bmc.FeatureIdentity)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := &Collector{
+		HostID:   "test",
+		Client:   client,
+		Store:    store,
+		Features: &override,
+		Intervals: PollIntervals{
+			Sensors: time.Hour,
+			Power:   time.Hour,
+			SEL:     time.Hour,
+			MCInfo:  time.Hour,
+			Prune:   time.Hour,
+		},
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		c.Run(ctx)
+		close(done)
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if client.power.Load() >= 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("collector did not stop")
+	}
+
+	if n := client.sensors.Load(); n != 0 {
+		t.Fatalf("sensors polls = %d, want 0", n)
+	}
+	if n := client.power.Load(); n < 1 {
+		t.Fatalf("power polls = %d, want >= 1", n)
+	}
+}

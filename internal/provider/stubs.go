@@ -8,7 +8,8 @@ import (
 )
 
 func init() {
-	Register("idrac", stubFactory("idrac"))
+	// Generic stub for hosts.Open skip-path tests and docs — not a shipping BMC.
+	Register("unimplemented", stubFactory("unimplemented"))
 }
 
 func stubFactory(name string) Factory {

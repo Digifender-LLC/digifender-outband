@@ -1,7 +1,7 @@
 {{define "partials/sensors.html"}}
 <div id="sensors-table"
      class="panel"
-     hx-get="/partials/sensors"
+     hx-get="{{.HostBase}}/partials/sensors"
      hx-trigger="every 8s"
      hx-swap="outerHTML">
   {{if .ErrMsg}}<p class="err" role="alert">{{.ErrMsg}}</p>{{end}}

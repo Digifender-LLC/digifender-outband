@@ -29,12 +29,43 @@ type AMTOptions struct {
 	// TLS selects HTTPS on port 16993 when the host port is 0; otherwise only
 	// flips the scheme (explicit Port still wins).
 	TLS bool `json:"tls,omitempty" yaml:"tls,omitempty"`
+	// KVM enables Hardware-KVM over the AMT redirection listener (16994/16995).
+	// Do not use the top-level AMI `kvm` nest on AMT hosts.
+	KVM *AMTKVMOptions `json:"kvm,omitempty" yaml:"kvm,omitempty"`
+}
+
+// AMTKVMOptions configures AMT Hardware-KVM (redirection RFB).
+type AMTKVMOptions struct {
+	// Port 0 → 16994, or 16995 when TLS is on.
+	Port int  `json:"port,omitempty" yaml:"port,omitempty"`
+	TLS  bool `json:"tls,omitempty" yaml:"tls,omitempty"` // redirection TLS; default follows amt.tls when Port is 0
 }
 
 // ILOOptions holds HPE iLO Redfish settings.
 type ILOOptions struct {
 	// InsecureSkipVerify defaults true when nil (iLO self-signed certs are common).
 	InsecureSkipVerify *bool `json:"insecure_skip_verify,omitempty" yaml:"insecure_skip_verify,omitempty"`
+	// RemoteConsole enables IRC/KVM bridging. Defaults true when nil for ilo hosts.
+	RemoteConsole *bool `json:"remote_console,omitempty" yaml:"remote_console,omitempty"`
+}
+
+// IDRACOptions holds Dell iDRAC settings (Redfish, WS-MAN, or classic web).
+type IDRACOptions struct {
+	// InsecureSkipVerify defaults true when nil (iDRAC self-signed certs are common).
+	InsecureSkipVerify *bool `json:"insecure_skip_verify,omitempty" yaml:"insecure_skip_verify,omitempty"`
+	// Transport selects the wire protocol: auto (default), redfish, wsman, or web.
+	// Auto probes once per host so mixed generations can share one inventory.
+	Transport string `json:"transport,omitempty" yaml:"transport,omitempty"`
+}
+
+// FeatureFlags optionally masks provider-advertised capabilities per host.
+// Only explicit false is applied today (hide Sensors/Metrics, SEL, Power, Console).
+// KVM remains inventory-driven via kvm / amt.kvm / ilo.remote_console — not listed here.
+type FeatureFlags struct {
+	Sensors *bool `json:"sensors,omitempty" yaml:"sensors,omitempty"`
+	SEL     *bool `json:"sel,omitempty" yaml:"sel,omitempty"`
+	Power   *bool `json:"power,omitempty" yaml:"power,omitempty"`
+	Console *bool `json:"console,omitempty" yaml:"console,omitempty"`
 }
 
 // HostConfig describes one BMC/host entry in the inventory.
@@ -51,10 +82,16 @@ type HostConfig struct {
 	// Keys must match the provider's sensor Name exactly; unmatched sensors keep their SDR name.
 	SensorNames map[string]string `json:"sensor_names,omitempty" yaml:"sensor_names,omitempty"`
 
-	IPMI *IPMIOptions `json:"ipmi,omitempty" yaml:"ipmi,omitempty"`
-	KVM  *KVMOptions  `json:"kvm,omitempty" yaml:"kvm,omitempty"`
-	AMT  *AMTOptions  `json:"amt,omitempty" yaml:"amt,omitempty"`
-	ILO  *ILOOptions  `json:"ilo,omitempty" yaml:"ilo,omitempty"`
+	// Features optionally disables UI/telemetry features the provider advertises.
+	// Omitted keys keep the provider default; explicit false hides nav, returns 501
+	// on direct routes, and skips background polling for that feature.
+	Features *FeatureFlags `json:"features,omitempty" yaml:"features,omitempty"`
+
+	IPMI  *IPMIOptions  `json:"ipmi,omitempty" yaml:"ipmi,omitempty"`
+	KVM   *KVMOptions   `json:"kvm,omitempty" yaml:"kvm,omitempty"`
+	AMT   *AMTOptions   `json:"amt,omitempty" yaml:"amt,omitempty"`
+	ILO   *ILOOptions   `json:"ilo,omitempty" yaml:"ilo,omitempty"`
+	IDRAC *IDRACOptions `json:"idrac,omitempty" yaml:"idrac,omitempty"`
 
 	// Options holds opaque JSON blobs keyed by provider name for experimental
 	// or in-tree backends that do not yet have a typed nest (unlike ipmi/kvm).
@@ -107,6 +144,28 @@ func (h HostConfig) SensorDisplayName(sdr string) string {
 	return sdr
 }
 
+// FeatureDisabled reports whether inventory explicitly turns off a named feature.
+// name is one of: sensors, sel, power, console (case-insensitive).
+func (h HostConfig) FeatureDisabled(name string) bool {
+	if h.Features == nil {
+		return false
+	}
+	var flag *bool
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "sensors", "sensor":
+		flag = h.Features.Sensors
+	case "sel":
+		flag = h.Features.SEL
+	case "power":
+		flag = h.Features.Power
+	case "console":
+		flag = h.Features.Console
+	default:
+		return false
+	}
+	return flag != nil && !*flag
+}
+
 // CipherID returns the RMCP+ cipher suite ID, or -1 for library default.
 func (h HostConfig) CipherID() int {
 	if h.IPMI == nil || h.IPMI.CipherSuite == nil {
@@ -129,13 +188,53 @@ func (h HostConfig) ILOInsecureSkipVerify() bool {
 	return *h.ILO.InsecureSkipVerify
 }
 
-// HasKVM reports whether AMI KVM is configured for this host.
-func (h HostConfig) HasKVM() bool {
+// ILORemoteConsole reports whether iLO IRC/KVM should be enabled.
+// Defaults to true for provider "ilo" when the field is omitted.
+func (h HostConfig) ILORemoteConsole() bool {
+	if h.Provider != "ilo" {
+		return false
+	}
+	if h.ILO == nil || h.ILO.RemoteConsole == nil {
+		return true
+	}
+	return *h.ILO.RemoteConsole
+}
+
+// IDRACInsecureSkipVerify reports whether the iDRAC client should skip TLS verify.
+// Defaults to true when the idrac nest or the field is omitted (self-signed iDRAC certs).
+func (h HostConfig) IDRACInsecureSkipVerify() bool {
+	if h.IDRAC == nil || h.IDRAC.InsecureSkipVerify == nil {
+		return true
+	}
+	return *h.IDRAC.InsecureSkipVerify
+}
+
+// IDRACTransport returns the configured iDRAC wire protocol (auto|redfish|wsman|web).
+// Empty / omitted means auto-detect per host.
+func (h HostConfig) IDRACTransport() string {
+	if h.IDRAC == nil {
+		return ""
+	}
+	return strings.TrimSpace(h.IDRAC.Transport)
+}
+
+// HasAMIKVM reports whether AMI Adviser/IVTP KVM is configured (top-level kvm nest).
+func (h HostConfig) HasAMIKVM() bool {
 	return h.KVM != nil
 }
 
-// KVMEndpoint returns the IVTP port and TLS flag. Port 0 becomes 7578.
-// Only meaningful when HasKVM() is true.
+// HasAMTKVM reports whether AMT Hardware-KVM is configured (amt.kvm nest).
+func (h HostConfig) HasAMTKVM() bool {
+	return h.AMT != nil && h.AMT.KVM != nil
+}
+
+// HasKVM reports whether any KVM backend is configured for this host.
+func (h HostConfig) HasKVM() bool {
+	return h.HasAMIKVM() || h.HasAMTKVM() || h.ILORemoteConsole()
+}
+
+// KVMEndpoint returns the AMI IVTP port and TLS flag. Port 0 becomes 7578.
+// Only meaningful when HasAMIKVM() is true.
 func (h HostConfig) KVMEndpoint() (port int, tls bool) {
 	if h.KVM == nil {
 		return 0, false
@@ -145,6 +244,28 @@ func (h HostConfig) KVMEndpoint() (port int, tls bool) {
 		port = 7578
 	}
 	return port, h.KVM.TLS
+}
+
+// AMTKVMEndpoint returns the AMT redirection port and TLS flag.
+// Only meaningful when HasAMTKVM() is true. Port 0 → 16994 (or 16995 when TLS).
+// When Port is 0 and kvm.tls is false, TLS follows amt.tls.
+func (h HostConfig) AMTKVMEndpoint() (port int, tls bool) {
+	if h.AMT == nil || h.AMT.KVM == nil {
+		return 0, false
+	}
+	tls = h.AMT.KVM.TLS
+	if h.AMT.KVM.Port == 0 && !h.AMT.KVM.TLS {
+		tls = h.AMT.TLS
+	}
+	port = h.AMT.KVM.Port
+	if port == 0 {
+		if tls {
+			port = 16995
+		} else {
+			port = 16994
+		}
+	}
+	return port, tls
 }
 
 // ProviderOptions returns the opaque options JSON for name, if present.
@@ -407,6 +528,9 @@ func normalizeHosts(hosts []HostConfig) ([]HostConfig, error) {
 		if h.Port == 0 && h.Provider == "ilo" {
 			h.Port = 443
 		}
+		if h.Port == 0 && h.Provider == "idrac" {
+			h.Port = 443
+		}
 		if h.ID == "" {
 			h.ID = sanitizeID(h.Host)
 		}
@@ -474,12 +598,54 @@ func validateHosts(cfg *Config) error {
 		if h.Provider == "" {
 			return fmt.Errorf("host %q: provider is required", h.ID)
 		}
+		if err := validateHostKVM(h); err != nil {
+			return err
+		}
 	}
 	if cfg.DefaultHost == "" {
 		cfg.DefaultHost = cfg.Hosts[0].ID
 	}
 	if _, ok := seen[cfg.DefaultHost]; !ok {
 		return fmt.Errorf("default host %q not found in inventory", cfg.DefaultHost)
+	}
+	return nil
+}
+
+// validateHostKVM enforces one KVM backend per host and provider-appropriate nests.
+// AMI top-level kvm is for IPMI-like hosts only; AMT uses amt.kvm; iLO uses ilo.remote_console.
+// httpapi bridge pick prefers AMT→AMI→iLO, so conflicting nests are rejected here.
+func validateHostKVM(h HostConfig) error {
+	ami := h.HasAMIKVM()
+	amt := h.HasAMTKVM()
+	ilo := h.ILORemoteConsole()
+	n := 0
+	if ami {
+		n++
+	}
+	if amt {
+		n++
+	}
+	if ilo {
+		n++
+	}
+	if n > 1 {
+		var parts []string
+		if ami {
+			parts = append(parts, "top-level kvm (AMI IVTP)")
+		}
+		if amt {
+			parts = append(parts, "amt.kvm")
+		}
+		if ilo {
+			parts = append(parts, "ilo.remote_console")
+		}
+		return fmt.Errorf("host %q: conflicting KVM backends (%s); use only one", h.ID, strings.Join(parts, ", "))
+	}
+	if ami && h.Provider != "ipmi" {
+		return fmt.Errorf("host %q: top-level kvm is AMI IVTP and only valid for provider \"ipmi\" (use amt.kvm or ilo.remote_console)", h.ID)
+	}
+	if amt && h.Provider != "amt" {
+		return fmt.Errorf("host %q: amt.kvm is only valid for provider \"amt\"", h.ID)
 	}
 	return nil
 }

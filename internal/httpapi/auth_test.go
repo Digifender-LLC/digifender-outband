@@ -14,6 +14,24 @@ import (
 	"outband/internal/telemetry"
 )
 
+func testRegistry(t *testing.T, list ...*hosts.Host) *hosts.Registry {
+	t.Helper()
+	if len(list) == 0 {
+		list = []*hosts.Host{{
+			ID:       "t1",
+			Name:     "test",
+			Provider: "fake",
+			Address:  "127.0.0.1",
+			Client:   featureClient{},
+		}}
+	}
+	reg, err := hosts.NewRegistry(list, list[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return reg
+}
+
 func testServer(t *testing.T, pass string) *Server {
 	t.Helper()
 	gate, err := NewGate(pass)
@@ -25,14 +43,7 @@ func testServer(t *testing.T, pass string) *Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	host := &hosts.Host{
-		ID:       "t1",
-		Name:     "test",
-		Provider: "fake",
-		Address:  "127.0.0.1",
-		Client:   featureClient{},
-	}
-	srv, err := New(host, gate, store, slog.Default(), config.OIDCConfig{})
+	srv, err := New(testRegistry(t), gate, store, slog.Default(), config.OIDCConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}

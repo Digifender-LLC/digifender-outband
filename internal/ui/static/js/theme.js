@@ -54,8 +54,26 @@
     });
   }
 
+  function switchHost(id) {
+    if (!id) return;
+    var path = location.pathname;
+    var m = path.match(/^\/h\/[^/]+(\/.*)?$/);
+    var suffix = m && m[1] ? m[1] : "/";
+    if (suffix === "") suffix = "/";
+    location.href = "/h/" + encodeURIComponent(id) + suffix + location.search + location.hash;
+  }
+
   function onReady() {
     applyTheme(readTheme());
+
+    document.addEventListener("change", function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest) return;
+      var sel = t.closest("[data-host-select]");
+      if (sel && sel.value) {
+        switchHost(sel.value);
+      }
+    });
 
     document.addEventListener("click", function (ev) {
       var t = ev.target;

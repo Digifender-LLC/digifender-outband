@@ -126,6 +126,26 @@
     @apply min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-xs text-muted;
   }
 
+  .topbar-host-picker {
+    @apply min-w-0 flex-1;
+  }
+
+  .topbar-host-select {
+    @apply max-w-full cursor-pointer truncate border-0 bg-transparent py-1 font-mono text-xs text-muted outline-none;
+  }
+  .topbar-host-select:hover,
+  .topbar-host-select:focus-visible {
+    @apply text-fg;
+  }
+
+  .sr-only {
+    @apply absolute h-px w-px overflow-hidden whitespace-nowrap;
+    clip: rect(0, 0, 0, 0);
+    margin: -1px;
+    border: 0;
+    padding: 0;
+  }
+
   .menu-toggle {
     @apply hidden h-9 w-9 cursor-pointer items-center justify-center rounded-sm border border-border bg-surface-2 p-0 text-lg leading-none text-fg;
   }

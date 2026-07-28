@@ -24,9 +24,9 @@
           pname = "outband";
           version =
             if self ? shortRev then
-              "0.1.0-alpha.2-${self.shortRev}"
+              "0.1.0-alpha.3-${self.shortRev}"
             else
-              "0.1.0-alpha.2-dirty";
+              "0.1.0-alpha.3-dirty";
 
           src = self;
 

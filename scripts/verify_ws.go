@@ -30,7 +30,11 @@ func main() {
 	resp.Body.Close()
 
 	dialer := websocket.Dialer{Jar: jar, HandshakeTimeout: 20 * time.Second}
-	conn, _, err := dialer.Dial("ws://127.0.0.1:8080/ws/sol", nil)
+	hostID := os.Getenv("OUTBAND_DEFAULT_HOST")
+	if hostID == "" {
+		hostID = "tyan"
+	}
+	conn, _, err := dialer.Dial("ws://127.0.0.1:8080/h/"+hostID+"/ws/sol", nil)
 	if err != nil {
 		fmt.Println("ws dial FAILED:", err)
 		os.Exit(1)

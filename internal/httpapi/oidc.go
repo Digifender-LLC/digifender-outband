@@ -98,7 +98,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("oidc callback error", "error", errMsg, "description", desc)
 		clearOIDCCookies(w)
 		w.WriteHeader(http.StatusUnauthorized)
-		d := s.page("Login", "")
+		d := s.page(s.registry.Default(), "Login", "")
 		d.Error = "SSO login failed"
 		s.render(w, "login.html", d)
 		return
@@ -179,7 +179,7 @@ func (s *Server) oidcLoginError(w http.ResponseWriter, msg string) {
 	s.log.Warn("oidc callback", "err", msg)
 	clearOIDCCookies(w)
 	w.WriteHeader(http.StatusUnauthorized)
-	d := s.page("Login", "")
+	d := s.page(s.registry.Default(), "Login", "")
 	d.Error = "SSO login failed"
 	s.render(w, "login.html", d)
 }

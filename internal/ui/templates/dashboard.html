@@ -8,7 +8,7 @@
     {{template "topbar" .}}
     <main class="content">
       <section class="page" id="dashboard-page"
-        hx-get="/partials/dashboard"
+        hx-get="{{.HostBase}}/partials/dashboard"
         hx-trigger="load, every 5s"
         hx-select="#dashboard-inner"
         hx-target="#dashboard-slot"

@@ -15,33 +15,42 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"outband/internal/amt/redir"
 	"outband/internal/bmc"
 	"outband/internal/config"
 	"outband/internal/hosts"
+	"outband/internal/ilo/rc"
 	"outband/internal/kvm"
+	"outband/internal/rfb"
 	"outband/internal/telemetry"
 	"outband/internal/ui"
 )
 
-// Server is the HTMX HTTP front-end.
-type Server struct {
-	host     *hosts.Host
-	gate     *Gate
-	oidc     *oidcAuth
-	store    *telemetry.Store
-	kvm      *kvm.Bridge // nil when FeatureKVM is absent
-	features bmc.FeatureSet
-	log      *slog.Logger
-	tmpl     *template.Template
-	mux      *http.ServeMux
-	upgrader websocket.Upgrader
+// kvmBridge is the AMI, AMT, or iLO KVM session owner used by /ws/kvm.
+type kvmBridge interface {
+	Acquire(ctx context.Context) (rfb.Source, rfb.Sink, func(), error)
+	Status() string
 }
 
-// New builds routes and templates bound to the active host.
+// Server is the HTMX HTTP front-end.
+type Server struct {
+	registry  *hosts.Registry
+	defaultID string
+	kvms      map[string]kvmBridge
+	gate      *Gate
+	oidc      *oidcAuth
+	store     *telemetry.Store
+	log       *slog.Logger
+	tmpl      *template.Template
+	mux       *http.ServeMux
+	upgrader  websocket.Upgrader
+}
+
+// New builds routes and templates bound to the host registry.
 // oidcCfg may be zero; when enabled, discovery runs during construction.
-func New(host *hosts.Host, gate *Gate, store *telemetry.Store, log *slog.Logger, oidcCfg config.OIDCConfig) (*Server, error) {
-	if host == nil {
-		return nil, fmt.Errorf("httpapi: nil host")
+func New(registry *hosts.Registry, gate *Gate, store *telemetry.Store, log *slog.Logger, oidcCfg config.OIDCConfig) (*Server, error) {
+	if registry == nil || len(registry.All()) == 0 {
+		return nil, fmt.Errorf("httpapi: empty host registry")
 	}
 	if log == nil {
 		log = slog.Default()
@@ -50,28 +59,33 @@ func New(host *hosts.Host, gate *Gate, store *telemetry.Store, log *slog.Logger,
 	if err != nil {
 		return nil, err
 	}
-	features := bmc.ClientFeatures(host.Client)
-	// FeatureKVM is owned by host inventory KVM config, not the IPMI adapter.
-	features &^= bmc.FeatureSet(bmc.FeatureKVM)
-	var bridge *kvm.Bridge
-	if host.HasKVM() {
-		features |= bmc.FeatureSet(bmc.FeatureKVM)
-		bridge = kvm.NewBridge(host.Address, host.User, host.Password, host.KVMPort(), host.KVMTLS(), log)
+	kvms := make(map[string]kvmBridge)
+	for _, h := range registry.All() {
+		switch {
+		case h.HasAMTKVM():
+			wsPort := h.Port
+			wsTLS := h.AMTTLS()
+			kvms[h.ID] = redir.NewBridge(h.Address, h.User, h.Password, h.KVMPort(), h.KVMTLS(), wsPort, wsTLS, log)
+		case h.HasAMIKVM():
+			kvms[h.ID] = kvm.NewBridge(h.Address, h.User, h.Password, h.KVMPort(), h.KVMTLS(), log)
+		case h.HasILOKVM():
+			kvms[h.ID] = rc.NewBridge(h.Address, h.Port, h.User, h.Password, h.ILOInsecureSkipVerify(), log)
+		}
 	}
 	oa, err := newOIDCAuth(context.Background(), oidcCfg)
 	if err != nil {
 		return nil, err
 	}
 	s := &Server{
-		host:     host,
-		gate:     gate,
-		oidc:     oa,
-		store:    store,
-		kvm:      bridge,
-		features: features,
-		log:      log,
-		tmpl:     tmpl,
-		mux:      http.NewServeMux(),
+		registry:  registry,
+		defaultID: registry.DefaultID(),
+		kvms:      kvms,
+		gate:      gate,
+		oidc:      oa,
+		store:     store,
+		log:       log,
+		tmpl:      tmpl,
+		mux:       http.NewServeMux(),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -85,16 +99,32 @@ func New(host *hosts.Host, gate *Gate, store *telemetry.Store, log *slog.Logger,
 	return s, nil
 }
 
-func (s *Server) hostID() string { return s.host.ID }
+func featuresFor(h *hosts.Host) bmc.FeatureSet {
+	return h.Features()
+}
 
-func (s *Server) displayHost() string {
-	if s.host.Name != "" && s.host.Name != s.host.Address {
-		return s.host.Name + " (" + s.host.Address + ")"
+func displayHost(h *hosts.Host) string {
+	if h.Name != "" && h.Name != h.Address {
+		return h.Name + " (" + h.Address + ")"
 	}
-	if s.host.Address != "" {
-		return s.host.Address
+	if h.Address != "" {
+		return h.Address
 	}
-	return s.host.ID
+	return h.ID
+}
+
+func hostBase(id string) string {
+	return "/h/" + id
+}
+
+func (s *Server) resolveHost(w http.ResponseWriter, r *http.Request) (*hosts.Host, bool) {
+	id := r.PathValue("hostID")
+	h, err := s.registry.Get(id)
+	if err != nil {
+		http.NotFound(w, r)
+		return nil, false
+	}
+	return h, true
 }
 
 func (s *Server) routes() {
@@ -107,27 +137,54 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /auth/oidc/login", s.handleOIDCLogin)
 	s.mux.HandleFunc("GET /auth/oidc/callback", s.handleOIDCCallback)
 
-	s.mux.HandleFunc("GET /{$}", s.handleDashboard)
-	s.mux.HandleFunc("GET /partials/dashboard", s.handleDashboardPartial)
+	// Default host landing + legacy unprefixed paths.
+	s.mux.HandleFunc("GET /{$}", s.redirectDefault(""))
+	for _, suffix := range []string{
+		"/power", "/partials/power",
+		"/sensors", "/partials/sensors",
+		"/sel", "/partials/sel",
+		"/metrics", "/api/metrics",
+		"/partials/dashboard",
+		"/console", "/kvm",
+		"/ws/sol", "/ws/kvm",
+	} {
+		s.mux.HandleFunc("GET "+suffix, s.redirectDefault(suffix))
+	}
+	s.mux.HandleFunc("POST /power", s.redirectDefault("/power"))
 
-	s.mux.HandleFunc("GET /power", s.handlePower)
-	s.mux.HandleFunc("GET /partials/power", s.handlePowerPartial)
-	s.mux.HandleFunc("POST /power", s.handlePowerAction)
+	const p = "/h/{hostID}"
+	s.mux.HandleFunc("GET "+p+"/{$}", s.handleDashboard)
+	s.mux.HandleFunc("GET "+p, s.handleDashboard) // /h/{id} without trailing slash
+	s.mux.HandleFunc("GET "+p+"/partials/dashboard", s.handleDashboardPartial)
 
-	s.mux.HandleFunc("GET /sensors", s.handleSensors)
-	s.mux.HandleFunc("GET /partials/sensors", s.handleSensorsPartial)
+	s.mux.HandleFunc("GET "+p+"/power", s.handlePower)
+	s.mux.HandleFunc("GET "+p+"/partials/power", s.handlePowerPartial)
+	s.mux.HandleFunc("POST "+p+"/power", s.handlePowerAction)
 
-	s.mux.HandleFunc("GET /sel", s.handleSEL)
-	s.mux.HandleFunc("GET /partials/sel", s.handleSELPartial)
+	s.mux.HandleFunc("GET "+p+"/sensors", s.handleSensors)
+	s.mux.HandleFunc("GET "+p+"/partials/sensors", s.handleSensorsPartial)
 
-	s.mux.HandleFunc("GET /metrics", s.handleMetrics)
-	s.mux.HandleFunc("GET /api/metrics", s.handleAPIMetrics)
+	s.mux.HandleFunc("GET "+p+"/sel", s.handleSEL)
+	s.mux.HandleFunc("GET "+p+"/partials/sel", s.handleSELPartial)
 
-	s.mux.HandleFunc("GET /console", s.handleConsole)
-	s.mux.HandleFunc("GET /ws/sol", s.handleSOLWS)
+	s.mux.HandleFunc("GET "+p+"/metrics", s.handleMetrics)
+	s.mux.HandleFunc("GET "+p+"/api/metrics", s.handleAPIMetrics)
 
-	s.mux.HandleFunc("GET /kvm", s.handleKVM)
-	s.mux.HandleFunc("GET /ws/kvm", s.handleKVMWS)
+	s.mux.HandleFunc("GET "+p+"/console", s.handleConsole)
+	s.mux.HandleFunc("GET "+p+"/ws/sol", s.handleSOLWS)
+
+	s.mux.HandleFunc("GET "+p+"/kvm", s.handleKVM)
+	s.mux.HandleFunc("GET "+p+"/ws/kvm", s.handleKVMWS)
+}
+
+func (s *Server) redirectDefault(suffix string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		target := hostBase(s.defaultID) + "/"
+		if suffix != "" {
+			target = hostBase(s.defaultID) + suffix
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
+	}
 }
 
 // Handler returns the root handler with auth middleware.
@@ -135,10 +192,19 @@ func (s *Server) Handler() http.Handler {
 	return s.gate.Middleware(s.mux)
 }
 
+type hostOption struct {
+	ID       string
+	Label    string
+	Provider string
+}
+
 type pageData struct {
 	Title           string
 	Active          string
 	BMCHost         string
+	HostID          string
+	HostBase        string
+	Hosts           []hostOption
 	Error           string
 	Flash           string
 	OIDCEnabled     bool
@@ -150,23 +216,35 @@ type pageData struct {
 	ShowKVM         bool
 }
 
-func (s *Server) page(title, active string) pageData {
+func (s *Server) page(h *hosts.Host, title, active string) pageData {
+	features := featuresFor(h)
+	opts := make([]hostOption, 0, len(s.registry.All()))
+	for _, oh := range s.registry.All() {
+		opts = append(opts, hostOption{
+			ID:       oh.ID,
+			Label:    displayHost(oh),
+			Provider: oh.Provider,
+		})
+	}
 	return pageData{
 		Title:           title,
 		Active:          active,
-		BMCHost:         s.displayHost(),
+		BMCHost:         displayHost(h),
+		HostID:          h.ID,
+		HostBase:        hostBase(h.ID),
+		Hosts:           opts,
 		OIDCEnabled:     s.oidc != nil,
 		PasswordEnabled: s.gate != nil && s.gate.passwordEnabled(),
-		ShowPower:       s.features.Has(bmc.FeaturePower),
-		ShowSensors:     s.features.Has(bmc.FeatureSensors),
-		ShowSEL:         s.features.Has(bmc.FeatureSEL),
-		ShowConsole:     s.features.Has(bmc.FeatureConsole),
-		ShowKVM:         s.features.Has(bmc.FeatureKVM),
+		ShowPower:       features.Has(bmc.FeaturePower),
+		ShowSensors:     features.Has(bmc.FeatureSensors),
+		ShowSEL:         features.Has(bmc.FeatureSEL),
+		ShowConsole:     features.Has(bmc.FeatureConsole),
+		ShowKVM:         features.Has(bmc.FeatureKVM),
 	}
 }
 
-func (s *Server) requireFeature(w http.ResponseWriter, f bmc.Feature, label string) bool {
-	if s.features.Has(f) {
+func (s *Server) requireFeature(w http.ResponseWriter, h *hosts.Host, f bmc.Feature, label string) bool {
+	if featuresFor(h).Has(f) {
 		return true
 	}
 	http.Error(w, label+" not supported by this BMC", http.StatusNotImplemented)
@@ -182,7 +260,9 @@ func (s *Server) render(w http.ResponseWriter, name string, data any) {
 }
 
 func (s *Server) handleLoginGet(w http.ResponseWriter, r *http.Request) {
-	s.render(w, "login.html", s.page("Login", ""))
+	// Login has no selected host; use default for branding fields only.
+	h := s.registry.Default()
+	s.render(w, "login.html", s.page(h, "Login", ""))
 }
 
 func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +276,7 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.gate.validPassword(r.FormValue("password")) {
 		w.WriteHeader(http.StatusUnauthorized)
-		d := s.page("Login", "")
+		d := s.page(s.registry.Default(), "Login", "")
 		d.Error = "Invalid password"
 		s.render(w, "login.html", d)
 		return
@@ -224,9 +304,9 @@ type dashboardData struct {
 	Warming bool
 }
 
-func (s *Server) loadDashboard() dashboardData {
-	d := dashboardData{pageData: s.page("Dashboard", "dashboard")}
-	meta := s.store.Meta(s.hostID())
+func (s *Server) loadDashboard(h *hosts.Host) dashboardData {
+	d := dashboardData{pageData: s.page(h, "Dashboard", "dashboard")}
+	meta := s.store.Meta(h.ID)
 	if meta.LastError != "" {
 		d.ErrMsg = meta.LastError
 	}
@@ -234,9 +314,9 @@ func (s *Server) loadDashboard() dashboardData {
 		d.Warming = true
 		return d
 	}
-	d.Info = s.store.LatestMCInfo(s.hostID())
-	d.Power = s.store.LatestPower(s.hostID())
-	for _, sn := range s.store.LatestSensors(s.hostID()) {
+	d.Info = s.store.LatestMCInfo(h.ID)
+	d.Power = s.store.LatestPower(h.ID)
+	for _, sn := range s.store.LatestSensors(h.ID) {
 		t := strings.ToLower(sn.Type)
 		if strings.Contains(t, "temperature") && sn.Present && sn.Status == "ok" {
 			d.Temps = append(d.Temps, sn)
@@ -255,12 +335,20 @@ func (s *Server) loadDashboard() dashboardData {
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
 	// Skeleton only — body loads via HTMX from the warm store.
-	s.render(w, "dashboard.html", s.page("Dashboard", "dashboard"))
+	s.render(w, "dashboard.html", s.page(h, "Dashboard", "dashboard"))
 }
 
 func (s *Server) handleDashboardPartial(w http.ResponseWriter, r *http.Request) {
-	s.render(w, "partials/dashboard.html", s.loadDashboard())
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	s.render(w, "partials/dashboard.html", s.loadDashboard(h))
 }
 
 type powerPageData struct {
@@ -272,41 +360,53 @@ type powerPageData struct {
 }
 
 func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeaturePower, "Power") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
 		return
 	}
-	d := powerPageData{pageData: s.page("Power", "power")}
-	meta := s.store.Meta(s.hostID())
+	if !s.requireFeature(w, h, bmc.FeaturePower, "Power") {
+		return
+	}
+	d := powerPageData{pageData: s.page(h, "Power", "power")}
+	meta := s.store.Meta(h.ID)
 	if meta.LastError != "" {
 		d.ErrMsg = meta.LastError
 	}
 	if !meta.Warm {
 		d.Warming = true
 	} else {
-		d.Power = s.store.LatestPower(s.hostID())
+		d.Power = s.store.LatestPower(h.ID)
 	}
 	s.render(w, "power.html", d)
 }
 
 func (s *Server) handlePowerPartial(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeaturePower, "Power") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
 		return
 	}
-	d := powerPageData{pageData: s.page("Power", "power")}
-	meta := s.store.Meta(s.hostID())
+	if !s.requireFeature(w, h, bmc.FeaturePower, "Power") {
+		return
+	}
+	d := powerPageData{pageData: s.page(h, "Power", "power")}
+	meta := s.store.Meta(h.ID)
 	if meta.LastError != "" {
 		d.ErrMsg = meta.LastError
 	}
 	if !meta.Warm {
 		d.Warming = true
 	} else {
-		d.Power = s.store.LatestPower(s.hostID())
+		d.Power = s.store.LatestPower(h.ID)
 	}
 	s.render(w, "partials/power_status.html", d)
 }
 
 func (s *Server) handlePowerAction(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeaturePower, "Power") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeaturePower, "Power") {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -314,20 +414,20 @@ func (s *Server) handlePowerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	action := bmc.PowerAction(r.FormValue("action"))
-	d := powerPageData{pageData: s.page("Power", "power")}
-	if err := s.host.Client.PowerControl(r.Context(), action); err != nil {
+	d := powerPageData{pageData: s.page(h, "Power", "power")}
+	if err := h.Client.PowerControl(r.Context(), action); err != nil {
 		d.ErrMsg = err.Error()
 	} else {
 		d.Result = fmt.Sprintf("Issued power %s", action)
 	}
 	// Brief settle; collector will refresh store shortly. Read live once for feedback.
 	time.Sleep(400 * time.Millisecond)
-	ps, err := s.host.Client.PowerStatus(r.Context())
+	ps, err := h.Client.PowerStatus(r.Context())
 	if err != nil && d.ErrMsg == "" {
 		d.ErrMsg = err.Error()
 	} else if err == nil {
 		d.Power = ps
-		_ = s.store.RecordPower(s.hostID(), ps)
+		_ = s.store.RecordPower(h.ID, ps)
 	}
 	s.render(w, "partials/power_panel.html", d)
 }
@@ -340,35 +440,43 @@ type sensorsPageData struct {
 }
 
 func (s *Server) handleSensors(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureSensors, "Sensors") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
 		return
 	}
-	d := sensorsPageData{pageData: s.page("Sensors", "sensors")}
-	meta := s.store.Meta(s.hostID())
+	if !s.requireFeature(w, h, bmc.FeatureSensors, "Sensors") {
+		return
+	}
+	d := sensorsPageData{pageData: s.page(h, "Sensors", "sensors")}
+	meta := s.store.Meta(h.ID)
 	if meta.LastError != "" {
 		d.ErrMsg = meta.LastError
 	}
 	if !meta.Warm {
 		d.Warming = true
 	} else {
-		d.Sensors = s.store.LatestSensors(s.hostID())
+		d.Sensors = s.store.LatestSensors(h.ID)
 	}
 	s.render(w, "sensors.html", d)
 }
 
 func (s *Server) handleSensorsPartial(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureSensors, "Sensors") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
 		return
 	}
-	d := sensorsPageData{pageData: s.page("Sensors", "sensors")}
-	meta := s.store.Meta(s.hostID())
+	if !s.requireFeature(w, h, bmc.FeatureSensors, "Sensors") {
+		return
+	}
+	d := sensorsPageData{pageData: s.page(h, "Sensors", "sensors")}
+	meta := s.store.Meta(h.ID)
 	if meta.LastError != "" {
 		d.ErrMsg = meta.LastError
 	}
 	if !meta.Warm {
 		d.Warming = true
 	} else {
-		d.Sensors = s.store.LatestSensors(s.hostID())
+		d.Sensors = s.store.LatestSensors(h.ID)
 	}
 	s.render(w, "partials/sensors.html", d)
 }
@@ -381,35 +489,43 @@ type selPageData struct {
 }
 
 func (s *Server) handleSEL(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureSEL, "SEL") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
 		return
 	}
-	d := selPageData{pageData: s.page("SEL", "sel")}
-	meta := s.store.Meta(s.hostID())
+	if !s.requireFeature(w, h, bmc.FeatureSEL, "SEL") {
+		return
+	}
+	d := selPageData{pageData: s.page(h, "SEL", "sel")}
+	meta := s.store.Meta(h.ID)
 	if meta.LastError != "" {
 		d.ErrMsg = meta.LastError
 	}
 	if !meta.Warm {
 		d.Warming = true
 	} else {
-		d.Entries = s.store.LatestSEL(s.hostID())
+		d.Entries = s.store.LatestSEL(h.ID)
 	}
 	s.render(w, "sel.html", d)
 }
 
 func (s *Server) handleSELPartial(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureSEL, "SEL") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
 		return
 	}
-	d := selPageData{pageData: s.page("SEL", "sel")}
-	meta := s.store.Meta(s.hostID())
+	if !s.requireFeature(w, h, bmc.FeatureSEL, "SEL") {
+		return
+	}
+	d := selPageData{pageData: s.page(h, "SEL", "sel")}
+	meta := s.store.Meta(h.ID)
 	if meta.LastError != "" {
 		d.ErrMsg = meta.LastError
 	}
 	if !meta.Warm {
 		d.Warming = true
 	} else {
-		d.Entries = s.store.LatestSEL(s.hostID())
+		d.Entries = s.store.LatestSEL(h.ID)
 	}
 	s.render(w, "partials/sel.html", d)
 }
@@ -422,7 +538,11 @@ type metricsPageData struct {
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureSensors, "Metrics") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureSensors, "Metrics") {
 		return
 	}
 	rng := r.URL.Query().Get("range")
@@ -430,7 +550,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		rng = "1h"
 	}
 	from, to := rangeWindow(rng)
-	names, err := s.store.ListSensorNames(s.hostID(), from, to)
+	names, err := s.store.ListSensorNames(h.ID, from, to)
 	if err != nil {
 		s.log.Warn("list sensors", "err", err)
 	}
@@ -439,7 +559,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		selected = defaultMetricSensors(names)
 	}
 	s.render(w, "metrics.html", metricsPageData{
-		pageData: s.page("Metrics", "metrics"),
+		pageData: s.page(h, "Metrics", "metrics"),
 		Sensors:  names,
 		Range:    rng,
 		Selected: selected,
@@ -493,7 +613,11 @@ func defaultMetricSensors(names []string) []string {
 }
 
 func (s *Server) handleAPIMetrics(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureSensors, "Metrics") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureSensors, "Metrics") {
 		return
 	}
 	q := r.URL.Query()
@@ -533,15 +657,15 @@ func (s *Server) handleAPIMetrics(w http.ResponseWriter, r *http.Request) {
 	}{
 		From: from,
 		To:   to,
-		Meta: s.store.Meta(s.hostID()),
+		Meta: s.store.Meta(h.ID),
 	}
 
 	if len(sensors) == 0 {
-		names, _ := s.store.ListSensorNames(s.hostID(), from, to)
+		names, _ := s.store.ListSensorNames(h.ID, from, to)
 		sensors = defaultMetricSensors(names)
 	}
 	for _, name := range sensors {
-		pts, err := s.store.QuerySamples(s.hostID(), name, from, to)
+		pts, err := s.store.QuerySamples(h.ID, name, from, to)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -561,38 +685,63 @@ func (s *Server) handleAPIMetrics(w http.ResponseWriter, r *http.Request) {
 
 type kvmPageData struct {
 	pageData
-	Status string
-	Port   int
-	TLS    bool
+	Status  string
+	Backend string
+	Port    int
+	TLS     bool
+	WSPath  string
 }
 
 func (s *Server) handleKVM(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureKVM, "KVM") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureKVM, "KVM") {
 		return
 	}
 	status := "unavailable"
-	if s.kvm != nil {
-		status = s.kvm.Status()
+	bridge := s.kvms[h.ID]
+	if bridge != nil {
+		status = bridge.Status()
 	}
+	backend := "KVM"
+	switch {
+	case h.HasAMTKVM():
+		backend = "Intel AMT Hardware-KVM"
+	case h.HasAMIKVM():
+		backend = "AMI Adviser/IVTP"
+	case h.HasILOKVM():
+		backend = "HPE iLO IRC"
+	}
+	// noVNC path is origin-relative without a leading slash.
+	wsPath := "h/" + h.ID + "/ws/kvm"
 	s.render(w, "kvm.html", kvmPageData{
-		pageData: s.page("KVM", "kvm"),
+		pageData: s.page(h, "KVM", "kvm"),
 		Status:   status,
-		Port:     s.host.KVMPort(),
-		TLS:      s.host.KVMTLS(),
+		Backend:  backend,
+		Port:     h.KVMPort(),
+		TLS:      h.KVMTLS(),
+		WSPath:   wsPath,
 	})
 }
 
 func (s *Server) handleKVMWS(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureKVM, "KVM") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
 		return
 	}
-	if s.kvm == nil {
+	if !s.requireFeature(w, h, bmc.FeatureKVM, "KVM") {
+		return
+	}
+	bridge := s.kvms[h.ID]
+	if bridge == nil {
 		http.Error(w, "KVM not supported by this BMC", http.StatusNotImplemented)
 		return
 	}
-	src, sink, release, err := s.kvm.Acquire(r.Context())
+	src, sink, release, err := bridge.Acquire(r.Context())
 	if err != nil {
-		if err == kvm.ErrBusy {
+		if errors.Is(err, kvm.ErrBusy) || errors.Is(err, redir.ErrBusy) || errors.Is(err, rc.ErrBusy) {
 			http.Error(w, "KVM session busy", http.StatusConflict)
 			return
 		}
@@ -610,24 +759,40 @@ func (s *Server) handleKVMWS(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	nc := newWSNetConn(conn)
-	if err := kvm.ServeRFB(r.Context(), nc, src, sink); err != nil {
+	if err := rfb.Serve(r.Context(), nc, src, sink); err != nil {
 		s.log.Info("kvm rfb ended", "err", err)
 	}
 }
 
+type consolePageData struct {
+	pageData
+	WSURL string
+}
+
 func (s *Server) handleConsole(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureConsole, "Console") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
 		return
 	}
-	s.render(w, "console.html", s.page("SOL Console", "console"))
+	if !s.requireFeature(w, h, bmc.FeatureConsole, "Console") {
+		return
+	}
+	s.render(w, "console.html", consolePageData{
+		pageData: s.page(h, "SOL Console", "console"),
+		WSURL:    hostBase(h.ID) + "/ws/sol",
+	})
 }
 
 func (s *Server) handleSOLWS(w http.ResponseWriter, r *http.Request) {
-	if !s.requireFeature(w, bmc.FeatureConsole, "Console") {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
 		return
 	}
-	console, ok := bmc.AsConsole(s.host.Client)
-	if !ok {
+	if !s.requireFeature(w, h, bmc.FeatureConsole, "Console") {
+		return
+	}
+	console, hasConsole := bmc.AsConsole(h.Client)
+	if !hasConsole {
 		http.Error(w, "Console not supported by this BMC", http.StatusNotImplemented)
 		return
 	}
@@ -649,7 +814,7 @@ func (s *Server) handleSOLWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer sess.Close()
 
-	_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n*** Outband SOL connected to "+s.displayHost()+" (serial, not KVM) ***\r\n"))
+	_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n*** Outband SOL connected to "+displayHost(h)+" (serial, not KVM) ***\r\n"))
 
 	errCh := make(chan error, 2)
 

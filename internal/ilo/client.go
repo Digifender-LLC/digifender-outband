@@ -55,7 +55,8 @@ func New(cfg Config) *Adapter {
 	return &Adapter{cfg: cfg, rf: newRedfish(cfg)}
 }
 
-// Features reports the iLO adapter capability set (no console/KVM in v1).
+// Features reports the iLO adapter capability set (no serial console in v1;
+// FeatureKVM is inventory-driven via ilo.remote_console).
 func (a *Adapter) Features() bmc.FeatureSet {
 	return bmc.FeatureSet(bmc.FeaturePower | bmc.FeatureSensors | bmc.FeatureSEL | bmc.FeatureIdentity)
 }

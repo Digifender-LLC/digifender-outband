@@ -4,7 +4,7 @@
   {{if .Result}}<p class="ok" role="status">{{.Result}}</p>{{end}}
   {{if .ErrMsg}}<p class="err" role="alert">{{.ErrMsg}}</p>{{end}}
   <form class="power-actions"
-        hx-post="/power"
+        hx-post="{{.HostBase}}/power"
         hx-target="#power-panel"
         hx-swap="outerHTML"
         onsubmit="return confirm('Send power action: ' + (event.submitter && event.submitter.value) + '?')">

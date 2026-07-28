@@ -16,9 +16,9 @@ Rules:
 
 - Unsupported methods return `bmc.ErrUnsupported` (or advertise fewer features and never call them).
 - Busy exclusive resources (e.g. SOL) return `bmc.ErrBusy`.
-- Unfinished providers may return `provider.ErrNotImplemented` from the factory so `hosts.Open` skips them with a warning (see the `idrac` stub).
+- Unfinished providers may return `provider.ErrNotImplemented` from the factory so `hosts.Open` skips them with a warning (see the `unimplemented` stub in `internal/provider/stubs.go`).
 - Do **not** special-case your provider in `httpapi` or the telemetry collector — capabilities and optional interfaces drive behavior.
-- AMI video KVM is inventory-driven (`kvm:` block), not part of the IPMI adapter feature set. Non-IPMI hosts omit `kvm` unless they share that path.
+- AMI video KVM is inventory-driven (`kvm:` block), not part of the IPMI adapter feature set. Non-IPMI hosts must not use top-level `kvm` — use `amt.kvm` or `ilo.remote_console` instead. At most one KVM backend per host.
 
 Factory signature:
 
@@ -44,14 +44,15 @@ _ "outband/internal/myprovider"
 
 ## Inventory and options
 
-Shared host fields: `id`, `name`, `provider`, `host`, `port`, `user`, `password`, optional `sensor_names`.
+Shared host fields: `id`, `name`, `provider`, `host`, `port`, `user`, `password`, optional `sensor_names`, optional `features`.
 
 Shipping providers use **typed nests**:
 
 - `ipmi:` — e.g. `cipher_suite`
-- `kvm:` — AMI Adviser/IVTP (`port`, `tls`); presence enables KVM in the UI
-- `amt:` — e.g. `tls` (see [amt.md](amt.md))
-- `ilo:` — e.g. `insecure_skip_verify` (see [ilo.md](ilo.md))
+- `kvm:` — AMI Adviser/IVTP (`port`, `tls`); presence enables KVM in the UI (IPMI hosts only)
+- `amt:` — e.g. `tls`, nested `kvm` for Hardware-KVM (see [amt.md](amt.md), [amt-kvm.md](amt-kvm.md))
+- `ilo:` — e.g. `insecure_skip_verify`, `remote_console` (see [ilo.md](ilo.md), [ilo-kvm.md](ilo-kvm.md))
+- `idrac:` — e.g. `transport`, `insecure_skip_verify` (see [idrac.md](idrac.md))
 
 Experimental or new in-tree providers should use the opaque **`options`** map keyed by provider name (JSON object per key). Decode with `cfg.ProviderOptions("myprovider")`.
 
@@ -96,9 +97,23 @@ When both a typed nest and `options` exist for the same concern, **typed wins** 
 Implement `Features() bmc.FeatureSet` and set only what you support:
 
 - `FeaturePower`, `FeatureSensors`, `FeatureSEL`, `FeatureConsole`, `FeatureIdentity`
-- `FeatureKVM` is driven by inventory `kvm` config for the active host, not by inventing support in the adapter
+- `FeatureKVM` is driven by inventory for the selected host: top-level `kvm` (AMI), `amt.kvm`, or `ilo.remote_console` — not by inventing support in the adapter
 
 HTTP nav/routes return 501 for missing features; the telemetry collector skips them.
+
+### Inventory feature overrides
+
+Per-host `features` can **disable** provider-advertised bits (does not enable missing ones):
+
+```yaml
+features:
+  sensors: false   # hides Sensors + Metrics, skips sensor polls
+  # sel: false
+  # power: false
+  # console: false
+```
+
+KVM stays inventory-driven (`kvm` / `amt.kvm` / `ilo.remote_console`); it is not controlled by `features`.
 
 ## Checklist
 

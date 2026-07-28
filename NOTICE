@@ -17,6 +17,26 @@ The Tyan S5512 / AMI MegaRAC (2013) wire dialect (7-byte headers, opcode map,
 MD5 validate including JNLP 0x02, ASP-2000 VideoHdr wrapper) was recovered
 independently from the BMC’s JViewer.jar and live traffic.
 
+AMT Hardware-KVM
+----------------
+The AMT redirection handshake and RFB client behaviour in internal/amt/redir
+were reimplemented in Go using publicly documented Intel AMT KVM behaviour and
+ideas from MeshCommander / MeshCentral amt-redir (Apache-2.0):
+
+  https://github.com/Ylianst/MeshCommander
+  https://github.com/Ylianst/MeshCentral
+  Copyright Intel Corporation / Ylian Saint-Hilaire
+  License: Apache-2.0
+
+iLO IRC / DVC
+-------------
+Portions of the iLO remote console path (DVC decode, session/crypto layout,
+and related IRC framing) in internal/ilo/rc were adapted from:
+
+  ilo-console — https://github.com/pedrotei/ilo-console
+  Copyright (c) Pedro Teixeira and contributors
+  License: MIT
+
 noVNC
 -----
 Vendored under internal/ui/static/novnc/ — MPL-2.0 for the core library, with

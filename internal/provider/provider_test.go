@@ -9,9 +9,10 @@ import (
 	"outband/internal/config"
 	"outband/internal/provider"
 
-	_ "outband/internal/amt"  // register amt
-	_ "outband/internal/ilo"  // register ilo
-	_ "outband/internal/ipmi" // register ipmi
+	_ "outband/internal/amt"   // register amt
+	_ "outband/internal/idrac" // register idrac
+	_ "outband/internal/ilo"   // register ilo
+	_ "outband/internal/ipmi"  // register ipmi
 )
 
 func TestKnown(t *testing.T) {
@@ -26,6 +27,9 @@ func TestKnown(t *testing.T) {
 	}
 	if !provider.Known("ilo") {
 		t.Fatal("ilo should be known")
+	}
+	if !provider.Known("unimplemented") {
+		t.Fatal("unimplemented stub should be known")
 	}
 	if provider.Known("nope") {
 		t.Fatal("nope should not be known")
@@ -42,8 +46,19 @@ func TestNewUnknown(t *testing.T) {
 	}
 }
 
-func TestNewIdracNotImplemented(t *testing.T) {
-	_, err := provider.New(config.HostConfig{ID: "d", Provider: "idrac", Host: "1.1.1.1"})
+func TestNewIdracConstructs(t *testing.T) {
+	c, err := provider.New(config.HostConfig{ID: "d", Provider: "idrac", Host: "1.1.1.1", User: "root", Password: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if c == nil {
+		t.Fatal("expected client")
+	}
+}
+
+func TestNewUnimplemented(t *testing.T) {
+	_, err := provider.New(config.HostConfig{ID: "d", Provider: "unimplemented", Host: "1.1.1.1"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -62,6 +77,9 @@ func TestNames(t *testing.T) {
 	}
 	if !slices.Contains(names, "ilo") {
 		t.Fatalf("Names=%v missing ilo", names)
+	}
+	if !slices.Contains(names, "idrac") {
+		t.Fatalf("Names=%v missing idrac", names)
 	}
 	if !slices.IsSorted(names) {
 		t.Fatalf("Names not sorted: %v", names)

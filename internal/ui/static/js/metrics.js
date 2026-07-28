@@ -67,7 +67,7 @@
   }
 
   function buildURL(cfg) {
-    var u = new URL("/api/metrics", window.location.origin);
+    var u = new URL("api/metrics", window.location.href);
     u.searchParams.set("range", cfg.range || "1h");
     (cfg.sensors || []).forEach(function (s) {
       u.searchParams.append("sensor", s);

@@ -1,6 +1,6 @@
 {{define "partials/power_status.html"}}
 <div id="power-status"
-     hx-get="/partials/power"
+     hx-get="{{.HostBase}}/partials/power"
      hx-trigger="every 4s"
      hx-swap="outerHTML">
   {{if .Power}}
