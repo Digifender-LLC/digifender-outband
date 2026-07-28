@@ -7,6 +7,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tags:
+        description: "Extra comma-separated image tags to push (e.g. v0.1.0-alpha.3,0.1.0-alpha.3,alpha)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -22,6 +27,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -47,12 +55,31 @@ jobs:
             type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
             type=sha,prefix=,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
 
+      - name: Extra dispatch tags
+        id: extra
+        if: github.event_name == 'workflow_dispatch' && inputs.tags != ''
+        run: |
+          IMAGE="${REGISTRY}/$(echo "${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')"
+          {
+            echo "tags<<EOF"
+            IFS=',' read -ra PARTS <<< "${{ inputs.tags }}"
+            for t in "${PARTS[@]}"; do
+              t="$(echo "$t" | xargs)"
+              [ -n "$t" ] || continue
+              echo "${IMAGE}:${t}"
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ steps.extra.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

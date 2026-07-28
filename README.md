@@ -97,6 +97,8 @@ If UDP/IPMI is flaky through userland Docker networking, try `network_mode: host
 
 ### Prebuilt image (GHCR)
 
+Multi-arch (`linux/amd64`, `linux/arm64`):
+
 ```bash
 docker pull ghcr.io/theminecraftguyguru/outband:alpha
 # or a release tag:
