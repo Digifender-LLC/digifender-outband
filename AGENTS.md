@@ -26,6 +26,7 @@ Provider internals are meant to stay vendor-agnostic (`internal/bmc` + `internal
 | `internal/rfb` | Minimal RFB server for noVNC |
 | `docs/` | BMC recon and KVM protocol notes |
 | `scripts/` | Ad-hoc verify/probe tools (`//go:build ignore`) |
+| `flake.nix` / `flake.lock` | Nix flake (`buildGoModule`, Go 1.25) |
 
 ## Run and test
 
@@ -44,6 +45,8 @@ go test ./...
 
 Docker: see `README.md` and `docker-compose.yml`. Prefer `MIPMI_HOSTS` JSON inventory when running under Compose.
 
+Nix: `nix build` / `nix run` / `nix develop` via the repo flake. Update `vendorHash` in `flake.nix` when Go module deps change.
+
 Verification helpers under `scripts/` are not part of the main module build (`//go:build ignore`). Run them with `go run scripts/verify_bmc.go` (etc.). They read credentials from the environment.
 
 ## Conventions
@@ -53,7 +56,8 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 - **Match existing style.** Prefer small, focused packages; keep HTMX partials boring and readable; avoid drive-by refactors unrelated to the task.
 - **Providers behind `bmc.Client`.** New vendor support goes through the registry — do not special-case iDRAC/AMT/IPMI in the HTTP layer.
 - **Unimplemented inventory hosts are skipped.** Stub providers (`idrac`/`amt`) return `provider.ErrNotImplemented`; `hosts.Open` warns and continues. Unknown providers and a stub `MIPMI_DEFAULT_HOST` still fail startup. At least one usable host is required.
-- **Capabilities drive UI and polling.** Implement `bmc.Capabilities` and omit unsupported bits (`FeatureConsole`, `FeatureKVM`, etc.). HTTP nav/routes and the telemetry collector consult `bmc.ClientFeatures`; missing features are hidden / skipped (501 if hit directly). IPMI advertises the full set including KVM. SOL is via optional `bmc.Console` (advertised with `FeatureConsole`), not part of `bmc.Client`.
+- **Capabilities drive UI and polling.** Implement `bmc.Capabilities` and omit unsupported bits (`FeatureConsole`, etc.). HTTP nav/routes and the telemetry collector consult `bmc.ClientFeatures`; missing features are hidden / skipped (501 if hit directly). IPMI advertises the control plane only; **`FeatureKVM` comes from inventory `kvm` config** on the active host. SOL is via optional `bmc.Console` (advertised with `FeatureConsole`), not part of `bmc.Client`.
+- **Provider-specific inventory options** nest under `ipmi` / `kvm` on each host (flat `cipher_suite` / `kvm_*` still migrate). Do not put vendor knobs on the shared top-level host fields for new code.
 - **Host-keyed telemetry.** Store and collector keys are host IDs; the UI still binds one active host for now.
 - **One SOL session / one KVM session** per process (or per active host adapter). Second clients should get a clear busy/conflict response.
 - **Tests.** Prefer table-driven unit tests next to the package (`*_test.go`). Do not require a live BMC for `go test ./...`.

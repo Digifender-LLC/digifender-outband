@@ -37,7 +37,9 @@ export MIPMI_HOSTS='[
     "host": "192.168.9.74",
     "port": 623,
     "user": "root",
-    "password": "'"$MIPMI_BMC_PASS"'"
+    "password": "'"$MIPMI_BMC_PASS"'",
+    "ipmi": { "cipher_suite": 3 },
+    "kvm": { "port": 7578, "tls": false }
   }
 ]'
 
@@ -50,15 +52,18 @@ The UI still binds to one **active** host (`MIPMI_DEFAULT_HOST`, or the first in
 
 Providers: `ipmi` (implemented); `idrac` / `amt` are registered stubs (not implemented). Unimplemented inventory entries are skipped at startup with a warning; the process fails if no usable hosts remain or if `MIPMI_DEFAULT_HOST` points at a stub. The active default must be an implemented provider.
 
-UI nav and telemetry follow `bmc.Capabilities` on the active host’s client. The IPMI provider advertises the full control plane plus KVM. Providers must omit unsupported features rather than advertising them and failing at runtime.
+Provider-specific options nest under `ipmi` (e.g. `cipher_suite`) and `kvm` (e.g. `port`, `tls`). Flat `cipher_suite` / `kvm_port` / `kvm_tls` are still accepted and migrated. IPMI hosts without a `kvm` block still get KVM enabled by default (port 7578); other providers need an explicit `kvm` block. KVM nav/bridge follow host `kvm` config, not the IPMI adapter feature set.
+
+UI nav and telemetry follow `bmc.Capabilities` on the active host’s client. The IPMI provider advertises the control plane (power/sensors/SEL/console/identity). Providers must omit unsupported features rather than advertising them and failing at runtime.
 
 Open http://127.0.0.1:8080 and log in with `MIPMI_UI_PASS`.
 
 Optional:
 
 - `MIPMI_BMC_PORT` (default `623`) — legacy path only
-- `MIPMI_CIPHER_SUITE` (default library choice) — legacy path; inventory uses `cipher_suite` per host
+- `MIPMI_CIPHER_SUITE` (default library choice) — legacy path; inventory uses nested `ipmi.cipher_suite` (flat `cipher_suite` still accepted)
 - `MIPMI_HOSTS_FILE` — path to a YAML or JSON hosts file
+- `MIPMI_KVM_PORT` / `MIPMI_KVM_TLS` — legacy path; inventory uses nested `kvm.port` / `kvm.tls`
 
 ## Docker
 
@@ -92,6 +97,24 @@ echo "$GITHUB_TOKEN" | docker login ghcr.io -u USERNAME --password-stdin
 Then open [Package settings](https://github.com/users/TheMinecraftGuyGuru/packages/container/mipmi/settings) → **Change visibility** → **Public** (matches this public repo). Package page: [ghcr.io/theminecraftguyguru/mipmi](https://github.com/TheMinecraftGuyGuru/mipmi/pkgs/container/mipmi).
 
 Run with the same env vars as Compose (`MIPMI_UI_PASS`, BMC credentials or `MIPMI_HOSTS`, etc.).
+
+## Nix
+
+Flake builds the same pure-Go binary (`CGO_ENABLED=0`, Go 1.25+). No app changes required.
+
+```bash
+# from a checkout
+nix build
+./result/bin/mipmi
+
+# or run without installing
+nix run . --   # still needs MIPMI_* env
+
+# from GitHub (tag or branch)
+nix run github:TheMinecraftGuyGuru/mipmi/v0.1.0-alpha.2
+```
+
+Dev shell: `nix develop` (Go 1.25). When `go.mod` / `go.sum` change, refresh `vendorHash` in `flake.nix` (the next `nix build` prints the expected hash on mismatch).
 
 ## Layout
 
