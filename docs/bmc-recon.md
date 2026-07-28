@@ -23,9 +23,9 @@ Target used during mIPMI development.
 ## KVM notes
 
 - Web session: `POST /rpc/WEBSES/create.asp` → `SESSION_COOKIE`.
-- JNLP: `/Java/jviewer.jnlp` (args: host, `7578`, opaque token, session cookie).
-- JAR confirms Adviser validate/encryption/video-fragment path — not noVNC.
-- Full spike write-up: [kvm-protocol.md](kvm-protocol.md).
+- JNLP: `/Java/jviewer.jnlp?EXTRNIP=…&JNLPSTR=JViewer` (positional args; this firmware keeps a trailing `0x02` on the session secret).
+- mIPMI bridges IVTP video/HID to noVNC via RFB (`/kvm`, `/ws/kvm`).
+- Full wire notes: [kvm-protocol.md](kvm-protocol.md).
 
 ## Out of scope (current)
 

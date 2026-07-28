@@ -1,0 +1,24 @@
+Third-party notices
+===================
+
+This project is released under the MIT License (see LICENSE). Vendored and
+adapted components keep their original terms as noted below.
+
+KVM / IVTP video path
+---------------------
+Portions of the KVM stack (IVTP framing concepts, ASPEED/ASP tile decode ideas,
+and related glue) were adapted from:
+
+  rd450x-console — https://github.com/BadCoder1337/rd450x-console
+  Copyright (c) 2026 Anton Musin
+  License: MIT
+
+The Tyan S5512 / AMI MegaRAC (2013) wire dialect (7-byte headers, opcode map,
+MD5 validate including JNLP 0x02, ASP-2000 VideoHdr wrapper) was recovered
+independently from the BMC’s JViewer.jar and live traffic.
+
+noVNC
+-----
+Vendored under internal/ui/static/novnc/ — MPL-2.0 for the core library, with
+HTML/CSS/image files under additional permissive licenses (see that tree’s
+LICENSE.txt and AUTHORS).

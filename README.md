@@ -2,7 +2,7 @@
 
 Go + HTMX BMC UI for IPMI 2.0 / RMCP+ (provider-agnostic internals). Dashboard, power, sensors, SEL, browser **SOL** (xterm.js), and experimental AMI Adviser/IVTP **KVM** bridged to noVNC.
 
-See [docs/bmc-recon.md](docs/bmc-recon.md) for the development BMC notes and [AGENTS.md](AGENTS.md) for contributor guidance.
+See [docs/bmc-recon.md](docs/bmc-recon.md) for the development BMC notes, [docs/kvm-protocol.md](docs/kvm-protocol.md) for the AMI KVM wire format, and [AGENTS.md](AGENTS.md) for contributor guidance.
 
 ## Requirements
 
@@ -95,3 +95,7 @@ To use JSON inventory in Compose, set `MIPMI_HOSTS` (and optionally `MIPMI_DEFAU
 ## WireGuard
 
 Do not commit `wireguard-export.zip` or private keys. Keep tunnel config outside the repo.
+
+## License
+
+mIPMI is MIT-licensed — see [LICENSE](LICENSE). Third-party notices (including MIT-derived KVM/IVTP ideas from [rd450x-console](https://github.com/BadCoder1337/rd450x-console) and vendored noVNC) are in [NOTICE](NOTICE).
