@@ -1,13 +1,13 @@
 # mIPMI
 
-Go + HTMX BMC UI for IPMI 2.0 / RMCP+ (provider-agnostic internals). Dashboard, power, sensors, SEL, and a browser **SOL** console (xterm.js). AMI JViewer KVM is out of scope for v1.
+Go + HTMX BMC UI for IPMI 2.0 / RMCP+ (provider-agnostic internals). Dashboard, power, sensors, SEL, browser **SOL** (xterm.js), and experimental AMI Adviser/IVTP **KVM** bridged to noVNC.
 
-See [docs/bmc-recon.md](docs/bmc-recon.md) for the development BMC notes.
+See [docs/bmc-recon.md](docs/bmc-recon.md) for the development BMC notes and [AGENTS.md](AGENTS.md) for contributor guidance.
 
 ## Requirements
 
-- Go 1.23+
-- Reachable BMC on UDP 623 (WireGuard or LAN)
+- Go 1.25+
+- Reachable BMC on UDP 623 (WireGuard or LAN); TCP 7578 for AMI KVM
 - Env credentials (never commit passwords)
 
 ## Run locally
@@ -79,9 +79,11 @@ To use JSON inventory in Compose, set `MIPMI_HOSTS` (and optionally `MIPMI_DEFAU
 - `internal/hosts` — host registry
 - `internal/ipmi` — RMCP+ adapter (`github.com/bougou/go-ipmi`)
 - `internal/config` — process + host inventory
-- `internal/httpapi` — HTMX routes + WebSocket SOL bridge
+- `internal/httpapi` — HTMX routes + WebSocket SOL/KVM bridges
 - `internal/telemetry` — host-keyed SQLite store + collector
-- `internal/ui` — templates + vendored HTMX/xterm static assets
+- `internal/amiweb` / `internal/kvm` / `internal/rfb` — AMI web login, IVTP KVM, RFB for noVNC
+- `internal/ui` — templates + vendored HTMX/xterm/noVNC static assets
+- `AGENTS.md` — guide for humans and agents working in this tree
 
 ## Security notes
 

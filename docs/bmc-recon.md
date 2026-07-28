@@ -7,11 +7,11 @@ Target used during mIPMI development.
 | Host | `192.168.9.74` |
 | Vendor | Tyan S5512 (IANA manufacturer ID 6653), AMI MegaRAC / GoAhead |
 | Firmware | S5512 R5.00 (2013-09-16) |
-| Creds (dev) | `root` / `superuser` — **env only; never commit** |
+| Creds (dev) | Factory AMI default is often `root` / device-specific — **env only; never commit** |
 | IPMI | UDP 623, IPMI 2.0 / RMCP+ |
 | SOL | Enabled @ 38.4 kbps (payload on UDP 623) |
 | Web UI | HTTP 80 (legacy TLS on 443) |
-| KVM | AMI JViewer TCP **7578** — proprietary Adviser/IVTP; see [kvm-protocol.md](kvm-protocol.md). Browser video KVM blocked for now. |
+| KVM | AMI JViewer TCP **7578** — proprietary Adviser/IVTP; mIPMI bridges decoded video to noVNC. See [kvm-protocol.md](kvm-protocol.md). |
 
 ## Access paths
 
@@ -29,7 +29,7 @@ Target used during mIPMI development.
 
 ## Out of scope (current)
 
-- Full Adviser codec reimplementation / HTML5 KVM viewer
 - Multi-BMC **fleet UI** (host picker / per-host routes) — inventory + host-keyed internals exist; UI still binds one active host
 - Real iDRAC / Intel AMT providers (stubs registered only)
 - HTTPS termination inside mIPMI (use reverse proxy or LAN trust)
+- KMCrypt / encrypted HID and some Adviser control opcodes (see KVM TODOs in `internal/kvm`)
