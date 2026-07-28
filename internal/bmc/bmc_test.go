@@ -25,12 +25,15 @@ func TestAllIPMIFeatures(t *testing.T) {
 	s := AllIPMIFeatures()
 	want := []Feature{
 		FeaturePower, FeatureSensors, FeatureSEL,
-		FeatureConsole, FeatureIdentity, FeatureKVM,
+		FeatureConsole, FeatureIdentity,
 	}
 	for _, f := range want {
 		if !s.Has(f) {
 			t.Fatalf("AllIPMIFeatures missing %d", f)
 		}
+	}
+	if s.Has(FeatureKVM) {
+		t.Fatal("AllIPMIFeatures must not include FeatureKVM")
 	}
 }
 

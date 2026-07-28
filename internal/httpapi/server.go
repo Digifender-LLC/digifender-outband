@@ -47,9 +47,12 @@ func New(host *hosts.Host, gate *Gate, store *telemetry.Store, log *slog.Logger)
 		return nil, err
 	}
 	features := bmc.ClientFeatures(host.Client)
+	// FeatureKVM is owned by host inventory KVM config, not the IPMI adapter.
+	features &^= bmc.FeatureSet(bmc.FeatureKVM)
 	var bridge *kvm.Bridge
-	if features.Has(bmc.FeatureKVM) {
-		bridge = kvm.NewBridge(host.Address, host.User, host.Password, host.KVMPort, host.KVMTLS, log)
+	if host.HasKVM() {
+		features |= bmc.FeatureSet(bmc.FeatureKVM)
+		bridge = kvm.NewBridge(host.Address, host.User, host.Password, host.KVMPort(), host.KVMTLS(), log)
 	}
 	s := &Server{
 		host:     host,
@@ -555,8 +558,8 @@ func (s *Server) handleKVM(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "kvm.html", kvmPageData{
 		pageData: s.page("KVM", "kvm"),
 		Status:   status,
-		Port:     s.host.KVMPort,
-		TLS:      s.host.KVMTLS,
+		Port:     s.host.KVMPort(),
+		TLS:      s.host.KVMTLS(),
 	})
 }
 

@@ -3,9 +3,13 @@ package ipmi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	goipmi "github.com/bougou/go-ipmi"
@@ -97,11 +101,38 @@ func (a *Adapter) withClient(ctx context.Context, fn func(*goipmi.Client) error)
 		return err
 	}
 	if err := fn(c); err != nil {
-		_ = c.Close(context.Background())
-		a.client = nil
+		if sessionBroken(err) {
+			_ = c.Close(context.Background())
+			a.client = nil
+		}
 		return err
 	}
 	return nil
+}
+
+// sessionBroken reports whether err likely means the RMCP+ session is dead
+// and should be dropped. Context cancellation is not treated as session death.
+func sessionBroken(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "session") ||
+		strings.Contains(msg, "not connected") ||
+		strings.Contains(msg, "broken pipe")
 }
 
 // Close closes the shared IPMI session.
@@ -240,7 +271,7 @@ func (a *Adapter) Sensors(ctx context.Context) ([]bmc.Sensor, error) {
 			}
 			present := s.IsReadingValid() || status != "N/A"
 			out = append(out, bmc.Sensor{
-				ID:      s.Number,
+				ID:      fmt.Sprintf("%02x", s.Number),
 				Name:    s.Name,
 				Type:    s.SensorType.String(),
 				Value:   value,
@@ -289,7 +320,7 @@ func (a *Adapter) SEL(ctx context.Context, limit int) ([]bmc.SELEntry, error) {
 			}
 			s := sel.Standard
 			out = append(out, bmc.SELEntry{
-				ID:          sel.RecordID,
+				ID:          fmt.Sprintf("%04x", sel.RecordID),
 				Timestamp:   s.Timestamp,
 				SensorType:  s.SensorType.String(),
 				SensorName:  fmt.Sprintf("%s (#%02x)", s.SensorType.String(), s.SensorNumber),

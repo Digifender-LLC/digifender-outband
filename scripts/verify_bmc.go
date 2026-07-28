@@ -42,7 +42,7 @@ func main() {
 	sel, err := a.SEL(ctx, 5)
 	fmt.Printf("SEL: err=%v count=%d\n", err, len(sel))
 	for _, e := range sel {
-		fmt.Printf("  - %04x %s %s\n", e.ID, e.Timestamp.Format(time.RFC3339), e.Description)
+		fmt.Printf("  - %s %s %s\n", e.ID, e.Timestamp.Format(time.RFC3339), e.Description)
 	}
 }
 

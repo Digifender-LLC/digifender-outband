@@ -4,6 +4,7 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 
 	"mipmi/internal/bmc"
@@ -52,7 +53,7 @@ func New(cfg config.HostConfig) (bmc.Client, error) {
 	return client, nil
 }
 
-// Names returns registered provider names (unsorted).
+// Names returns registered provider names in sorted order.
 func Names() []string {
 	mu.RLock()
 	defer mu.RUnlock()
@@ -60,6 +61,7 @@ func Names() []string {
 	for name := range factories {
 		out = append(out, name)
 	}
+	sort.Strings(out)
 	return out
 }
 

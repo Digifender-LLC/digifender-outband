@@ -12,11 +12,11 @@ import (
 	"mipmi/internal/config"
 	"mipmi/internal/hosts"
 	"mipmi/internal/httpapi"
+	"mipmi/internal/provider"
 	"mipmi/internal/telemetry"
 
-	// Register BMC providers.
+	// Register BMC providers (ipmi + stubs in provider).
 	_ "mipmi/internal/ipmi"
-	_ "mipmi/internal/provider"
 )
 
 func main() {
@@ -24,6 +24,10 @@ func main() {
 
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
+		log.Error("config", "err", err)
+		os.Exit(2)
+	}
+	if err := config.ValidateProviders(cfg, provider.Known); err != nil {
 		log.Error("config", "err", err)
 		os.Exit(2)
 	}

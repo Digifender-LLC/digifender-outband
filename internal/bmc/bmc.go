@@ -44,9 +44,10 @@ func controlPlaneFeatures() FeatureSet {
 	return FeatureSet(FeaturePower | FeatureSensors | FeatureSEL | FeatureConsole | FeatureIdentity)
 }
 
-// AllIPMIFeatures is the feature set exposed by the IPMI adapter (including AMI KVM).
+// AllIPMIFeatures is the feature set exposed by the IPMI adapter.
+// Video KVM is not included; host inventory KVM config drives FeatureKVM in the UI.
 func AllIPMIFeatures() FeatureSet {
-	return controlPlaneFeatures() | FeatureSet(FeatureKVM)
+	return controlPlaneFeatures()
 }
 
 // ErrUnsupported indicates the BMC/provider does not support the requested operation.
@@ -86,12 +87,14 @@ func ClientFeatures(c Client) FeatureSet {
 
 // MCInfo is identity/firmware information from the BMC.
 type MCInfo struct {
-	DeviceID        uint8
 	FirmwareRev     string
 	ProtocolVersion string // e.g. IPMI "2.0", Redfish revision
-	ManufacturerID  uint32
 	Manufacturer    string
-	ProductID       uint16
+	Model           string // product / model name (IPMI may leave empty)
+	// Optional vendor-native IDs (IPMI Get Device ID); zero means unset.
+	DeviceID       uint8
+	ManufacturerID uint32
+	ProductID      uint16
 }
 
 // PowerStatus is chassis power state.
@@ -104,7 +107,7 @@ type PowerStatus struct {
 
 // Sensor is a normalized sensor reading for the UI.
 type Sensor struct {
-	ID      uint8
+	ID      string // opaque (IPMI: "%02x" of sensor number)
 	Name    string
 	Type    string
 	Value   string
@@ -115,7 +118,7 @@ type Sensor struct {
 
 // SELEntry is a system event log record.
 type SELEntry struct {
-	ID          uint16
+	ID          string // opaque (IPMI: "%04x" of record id)
 	Timestamp   time.Time
 	SensorType  string
 	SensorName  string

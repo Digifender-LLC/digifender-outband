@@ -19,8 +19,9 @@ type Host struct {
 	Address  string
 	User     string
 	Password string // server-side only; used for AMI web / KVM
-	KVMPort  int    // IVTP video port (default 7578)
-	KVMTLS  bool   // wrap video socket in TLS
+	hasKVM   bool
+	kvmPort  int
+	kvmTLS   bool
 	Client   bmc.Client
 }
 
@@ -30,6 +31,24 @@ func (h *Host) DisplayName() string {
 		return h.Name
 	}
 	return h.Address
+}
+
+// HasKVM reports whether AMI KVM is configured for this host.
+func (h *Host) HasKVM() bool {
+	return h != nil && h.hasKVM
+}
+
+// KVMPort returns the IVTP video port (meaningful when HasKVM).
+func (h *Host) KVMPort() int {
+	if h == nil {
+		return 0
+	}
+	return h.kvmPort
+}
+
+// KVMTLS reports whether the IVTP socket uses TLS (meaningful when HasKVM).
+func (h *Host) KVMTLS() bool {
+	return h != nil && h.kvmTLS
 }
 
 // Registry is an ordered map of hosts built at startup.
@@ -73,10 +92,6 @@ func Open(cfgs []config.HostConfig, defaultID string, log *slog.Logger) (*Regist
 			_ = r.Close()
 			return nil, err
 		}
-		kvmPort := cfg.KVMPort
-		if kvmPort == 0 {
-			kvmPort = 7578
-		}
 		h := &Host{
 			ID:       cfg.ID,
 			Name:     cfg.Name,
@@ -84,9 +99,13 @@ func Open(cfgs []config.HostConfig, defaultID string, log *slog.Logger) (*Regist
 			Address:  cfg.Host,
 			User:     cfg.User,
 			Password: cfg.Password,
-			KVMPort:  kvmPort,
-			KVMTLS:  cfg.KVMTLS,
 			Client:   client,
+		}
+		if cfg.HasKVM() {
+			port, tls := cfg.KVMEndpoint()
+			h.hasKVM = true
+			h.kvmPort = port
+			h.kvmTLS = tls
 		}
 		r.order = append(r.order, cfg.ID)
 		r.byID[cfg.ID] = h

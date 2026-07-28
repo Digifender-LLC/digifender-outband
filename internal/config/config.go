@@ -13,6 +13,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// IPMIOptions holds IPMI/RMCP+-specific settings.
+type IPMIOptions struct {
+	CipherSuite *int `json:"cipher_suite,omitempty" yaml:"cipher_suite,omitempty"`
+}
+
+// KVMOptions holds AMI Adviser/IVTP KVM settings. Presence of this block enables KVM.
+type KVMOptions struct {
+	Port int  `json:"port,omitempty" yaml:"port,omitempty"` // 0 → default 7578 when block present
+	TLS  bool `json:"tls,omitempty" yaml:"tls,omitempty"`
+}
+
 // HostConfig describes one BMC/host entry in the inventory.
 type HostConfig struct {
 	ID       string `json:"id" yaml:"id"`
@@ -22,20 +33,35 @@ type HostConfig struct {
 	Port     int    `json:"port" yaml:"port"`
 	User     string `json:"user" yaml:"user"`
 	Password string `json:"password" yaml:"password"`
-	// CipherSuite is IPMI-specific; nil means library default (-1).
-	CipherSuite *int `json:"cipher_suite,omitempty" yaml:"cipher_suite,omitempty"`
-	// KVMPort is the AMI Adviser/IVTP TCP port (default 7578).
-	KVMPort int `json:"kvm_port,omitempty" yaml:"kvm_port,omitempty"`
-	// KVMTLS enables TLS on the video socket (newer MegaRAC kvmsecure).
-	KVMTLS bool `json:"kvm_tls,omitempty" yaml:"kvm_tls,omitempty"`
+
+	IPMI *IPMIOptions `json:"ipmi,omitempty" yaml:"ipmi,omitempty"`
+	KVM  *KVMOptions  `json:"kvm,omitempty" yaml:"kvm,omitempty"`
 }
 
 // CipherID returns the RMCP+ cipher suite ID, or -1 for library default.
 func (h HostConfig) CipherID() int {
-	if h.CipherSuite == nil {
+	if h.IPMI == nil || h.IPMI.CipherSuite == nil {
 		return -1
 	}
-	return *h.CipherSuite
+	return *h.IPMI.CipherSuite
+}
+
+// HasKVM reports whether AMI KVM is configured for this host.
+func (h HostConfig) HasKVM() bool {
+	return h.KVM != nil
+}
+
+// KVMEndpoint returns the IVTP port and TLS flag. Port 0 becomes 7578.
+// Only meaningful when HasKVM() is true.
+func (h HostConfig) KVMEndpoint() (port int, tls bool) {
+	if h.KVM == nil {
+		return 0, false
+	}
+	port = h.KVM.Port
+	if port == 0 {
+		port = 7578
+	}
+	return port, h.KVM.TLS
 }
 
 // Config holds process configuration. BMC credentials stay server-side.
@@ -152,20 +178,18 @@ func loadHosts(hostsFile, legacyHost string, legacyPort int, legacyUser, legacyP
 		return nil, fmt.Errorf("BMC password is required (MIPMI_BMC_PASS or host inventory password)")
 	}
 	id := sanitizeID(legacyHost)
-	name := legacyHost
 	cipher := legacyCipher
-	return []HostConfig{{
-		ID:          id,
-		Name:        name,
-		Provider:    "ipmi",
-		Host:        legacyHost,
-		Port:        legacyPort,
-		User:        legacyUser,
-		Password:    legacyPass,
-		CipherSuite: &cipher,
-		KVMPort:     kvmPort,
-		KVMTLS:      kvmTLS,
-	}}, nil
+	return normalizeHosts([]HostConfig{{
+		ID:       id,
+		Name:     legacyHost,
+		Provider: "ipmi",
+		Host:     legacyHost,
+		Port:     legacyPort,
+		User:     legacyUser,
+		Password: legacyPass,
+		IPMI:     &IPMIOptions{CipherSuite: &cipher},
+		KVM:      &KVMOptions{Port: kvmPort, TLS: kvmTLS},
+	}})
 }
 
 func loadHostsFile(path string) ([]HostConfig, error) {
@@ -235,6 +259,12 @@ func normalizeHosts(hosts []HostConfig) ([]HostConfig, error) {
 		if h.Name == "" {
 			h.Name = h.Host
 		}
+
+		// Preserve AMI-via-IPMI default: enable KVM unless explicitly omitted for non-ipmi.
+		if h.Provider == "ipmi" && h.KVM == nil {
+			h.KVM = &KVMOptions{Port: 7578}
+		}
+
 		out[i] = h
 	}
 	return out, nil
@@ -256,6 +286,9 @@ func validateHosts(cfg *Config) error {
 		if h.Host == "" {
 			return fmt.Errorf("host %q: address (host) is required", h.ID)
 		}
+		if h.User == "" {
+			return fmt.Errorf("host %q: user is required", h.ID)
+		}
 		if h.Password == "" {
 			return fmt.Errorf("host %q: password is required", h.ID)
 		}
@@ -268,6 +301,23 @@ func validateHosts(cfg *Config) error {
 	}
 	if _, ok := seen[cfg.DefaultHost]; !ok {
 		return fmt.Errorf("default host %q not found in inventory", cfg.DefaultHost)
+	}
+	return nil
+}
+
+// ValidateProviders checks that every host's provider name is known.
+// known is typically provider.Known; passed in to avoid an import cycle.
+func ValidateProviders(cfg *Config, known func(string) bool) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if known == nil {
+		return fmt.Errorf("known provider check is nil")
+	}
+	for _, h := range cfg.Hosts {
+		if !known(h.Provider) {
+			return fmt.Errorf("host %q: unknown provider %q", h.ID, h.Provider)
+		}
 	}
 	return nil
 }
