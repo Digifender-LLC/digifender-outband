@@ -107,16 +107,20 @@ func Logout(host, cookie string) {
 
 // ParseJNLPArgs extracts kvmtoken / webcookie / port from a JViewer jnlp body.
 func ParseJNLPArgs(body, fallbackCookie string) map[string]string {
-	// Repair Tyan corruption: 0x02 spliced before the next <argument> tag.
-	body = strings.ReplaceAll(body, "\x02<argument>", "</argument><argument>")
-	body = strings.ReplaceAll(body, "\x02", "")
+	// Tyan corruption: a 0x02 byte overwrites "</" in "</argument><argument>",
+	// yielding "TOKEN\x02<argument>COOKIE</argument>". The Adviser registers the
+	// session secret as TOKEN+"\x02", so we must keep that byte on the token when
+	// repairing the XML (insert "</" after \x02, do not strip \x02).
+	body = strings.ReplaceAll(body, "\x02<argument>", "\x02</argument><argument>")
 
 	ms := reArg.FindAllStringSubmatch(body, -1)
 	raw := make([]string, 0, len(ms))
 	for _, m := range ms {
 		v := strings.TrimSpace(m[1])
+		// Keep \x02 (and other non-printables that may be part of the secret);
+		// only drop NULs which break Go strings / logging.
 		v = strings.Map(func(r rune) rune {
-			if r == 0 || (!unicode.IsPrint(r) && !unicode.IsSpace(r)) {
+			if r == 0 {
 				return -1
 			}
 			return r

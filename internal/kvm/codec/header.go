@@ -5,92 +5,53 @@ import (
 	"fmt"
 )
 
-// header.go — port of soc/video/VideoHeader.java (the 86-byte frame header)
-// and the subset of soc/SOCFrameHdr.java + VideoEngineInfo that the decoder
-// reads. The reassembled frame buffer is: [86-byte VideoHeader][compressed
-// tile data]. VideoHeader.set() returns the bytes after offset 86 as the
-// compressed buffer.
+// Tyan / older AMI ASP-2000 frame layout (JViewer FrameHdr.set):
+//
+//	[0:39]   VideoHdr wrapper (signature "ASP-2000" at [19:27])
+//	[39:125] ASP2000ImgHdr (86 bytes) — same field order as newer VideoHeader
+//	[125:]   compressed tile payload
+//
+// Newer MegaRAC (rd450x) omits the 39-byte VideoHdr and starts at the 86-byte
+// header; we accept both.
 
-// videoHeaderSize is VideoHeader.VIDEO_HDR_SIZE.
-const videoHeaderSize = 86
+const (
+	videoHdrSize      = 39
+	asp2000HeaderSize = 86
+	videoHeaderSize   = asp2000HeaderSize // alias used by comments / tests
+)
 
 // frameHeader carries the fields the decoder consumes, named after
 // VideoEngineInfo.FRAME_HEADER / SourceModeInfo / DestinationModeInfo.
 type frameHeader struct {
-	// Source/destination resolutions.
-	sourceX, sourceY int // SourceModeInfo.X/.Y
-	destX, destY     int // DestinationModeInfo.X/.Y (== width/height used for placement)
+	sourceX, sourceY int
+	destX, destY     int
 
-	// FRAME_HEADER selectors.
 	compressionMode      int
 	jpegScaleFactor      int
-	jpegTableSelector    int // selector
-	jpegYUVTableMapping  int // Mapping
+	jpegTableSelector    int
+	jpegYUVTableMapping  int
 	sharpModeSelection   int
-	advanceTableSelector int // advance_selector
+	advanceTableSelector int
 	advanceScaleFactor   int
 	numberOfMB           int
 	rc4Enable            int
 	rc4Reset             int
 	mode420              int
 
-	compressSize int // CompressData.CompressSize
+	compressSize int
 }
 
-// parseFrameHeader ports VideoHeader.set() (little-endian field reads) followed
-// by SOCFrameHdr.getFrameVariables(). It returns the parsed header and the
-// compressed payload (the bytes after the 86-byte header).
+// parseFrameHeader ports FrameHdr.set() / ASP2000ImgHdr.setASPVariables().
 func parseFrameHeader(frame []byte) (frameHeader, []byte, error) {
-	if len(frame) < videoHeaderSize {
-		return frameHeader{}, nil, fmt.Errorf("kvm/codec: frame too short: %d < %d", len(frame), videoHeaderSize)
+	b := frame
+	if len(b) >= videoHdrSize+8 && string(b[19:27]) == "ASP-2000" {
+		b = b[videoHdrSize:]
+	}
+	if len(b) < asp2000HeaderSize {
+		return frameHeader{}, nil, fmt.Errorf("kvm/codec: frame too short: %d < %d", len(b), asp2000HeaderSize)
 	}
 	le := binary.LittleEndian
-	b := frame
 
-	// VideoHeader.set field order (all little-endian):
-	//  0  iEngVersion          short
-	//  2  wHeaderLen           short
-	//  4  SourceMode_X         short
-	//  6  SourceMode_Y         short
-	//  8  SourceMode_ColorDepth   short
-	// 10  SourceMode_RefreshRate  short
-	// 12  SourceMode_ModeIndex    byte
-	// 13  DestinationMode_X    short
-	// 15  DestinationMode_Y    short
-	// 17  DestinationMode_ColorDepth short
-	// 19  DestinationMode_RefreshRate short
-	// 21  DestinationMode_ModeIndex byte
-	// 22  FrameHdr_StartCode   int
-	// 26  FrameHdr_FrameNumber int
-	// 30  FrameHdr_HSize       short
-	// 32  FrameHdr_VSize       short
-	// 34  FrameHdr_Reserved[0] int
-	// 38  FrameHdr_Reserved[1] int
-	// 42  FrameHdr_CompressionMode  byte
-	// 43  FrameHdr_JPEGScaleFactor  byte
-	// 44  FrameHdr_JPEGTableSelector byte
-	// 45  FrameHdr_JPEGYUVTableMapping byte
-	// 46  FrameHdr_SharpModeSelection  byte
-	// 47  FrameHdr_AdvanceTableSelector byte
-	// 48  FrameHdr_AdvanceScaleFactor  byte
-	// 49  FrameHdr_NumberOfMB  int
-	// 53  FrameHdr_RC4Enable   byte
-	// 54  FrameHdr_RC4Reset    byte
-	// 55  Mode420              byte
-	// 56  InfData_DownScalingMethod byte
-	// 57  InfData_DifferentialSetting byte
-	// 58  InfData_AnalogDifferentialThreshold short
-	// 60  InfData_DigitalDifferentialThreshold short
-	// 62  InfData_ExternalSignalEnable byte
-	// 63  InfData_AutoMode     byte
-	// 64  InfData_VQMode       byte
-	// 65  CompressData_SourceFrameSize int
-	// 69  CompressData_CompressSize    int
-	// 73  CompressData_HDebug  int
-	// 77  CompressData_VDebug  int
-	// 81  InputSignal          byte
-	// 82  Cursor_XPos          short
-	// 84  Cursor_YPos          short
 	var h frameHeader
 	h.sourceX = int(le.Uint16(b[4:]))
 	h.sourceY = int(le.Uint16(b[6:]))
@@ -109,6 +70,5 @@ func parseFrameHeader(frame []byte) (frameHeader, []byte, error) {
 	h.mode420 = int(b[55])
 	h.compressSize = int(int32(le.Uint32(b[69:])))
 
-	compressed := frame[videoHeaderSize:]
-	return h, compressed, nil
+	return h, b[asp2000HeaderSize:], nil
 }

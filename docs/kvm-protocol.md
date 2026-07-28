@@ -1,82 +1,75 @@
 # AMI JViewer / Adviser KVM protocol notes
 
-Target: Tyan S5512 BMC (`192.168.9.74`), AMI MegaRAC GoAhead web UI, JViewer on TCP **7578**.
+Target: Tyan S5512 BMC (`192.168.9.74`), AMI MegaRAC GoAhead, FW **S5512 R5.00** (2013), JViewer on TCP **7578** (cleartext).
 
-## Capture summary (2026-07-28)
+mIPMI Path 2: native IVTP client → ASPEED/ASP-2000 decode → RFB → vendored noVNC (`/kvm`, `/ws/kvm`).
+
+## Live path (verified 2026-07-28)
 
 | Step | Result |
 |------|--------|
-| Web login | `POST /rpc/WEBSES/create.asp` with `WEBVAR_USERNAME` / `WEBVAR_PASSWORD` returns `SESSION_COOKIE` (AMI web session token). |
-| JNLP | `GET http://BMC/Java/jviewer.jnlp` with `Cookie: SessionCookie=<token>` (BMC `Content-Length` is wrong — use `--ignore-content-length`). |
-| JAR | `http://BMC/Java/release/JViewer.jar` (~218 KiB), package `com.ami.kvm.jviewer.*`. |
-| TCP 7578 | Port open; **no banner**. Server waits for a framed client packet. Raw / length-prefixed token writes time out with no reply. |
+| Web login | `POST /rpc/WEBSES/create.asp` → `SESSION_COOKIE` |
+| JNLP | `GET /Java/jviewer.jnlp?EXTRNIP=…&JNLPSTR=JViewer` with `Cookie: SessionCookie=…` (ignore bad `Content-Length`) |
+| IVTP validate | 7-byte header + MD5(session secret) → response type 35, body `1` = OK |
+| Video | type 5 fragments → `ASP-2000` frames → decode (e.g. 1024×768) |
+| HID | type 6 IUSB keyboard/mouse reports |
 
-### JNLP arguments
+### JNLP arguments (positional)
 
-Parsed from live JNLP (XML is slightly corrupt: a `0x02` byte splices argument tags):
+1. BMC host  
+2. Port `7578`  
+3. **Session secret** (16 printable chars **plus** a trailing `0x02` on this firmware)  
+4. Web `SessionCookie`
 
-1. BMC host (e.g. `192.168.9.74`)
-2. Port `7578`
-3. Short opaque token (~16 chars) — appears per-launch / per-session
-4. Web `SessionCookie` value (same string returned by `WEBSES/create.asp`)
+Tyan JNLP XML is corrupt: `</` in `</argument>` before the cookie is overwritten by `0x02`, so the file looks like `TOKEN\x02<argument>COOKIE`. Repair by inserting `</` after the `0x02` **without stripping it** — Adviser MD5s `TOKEN+"\x02"`. Stripping `\x02` yields validate body `0` (auth failure).
 
-Native libs: `Linux_x86_64.jar` / Win / Mac under `Java/release/` (HID helpers).
+## IVTP dialect (Tyan / this JViewer.jar)
 
-## Protocol class (from JViewer.jar strings / class names)
-
-This is **not** RFB, VNC, WebSocket, or HTML5 KVM. It is AMI’s proprietary **Adviser / IVTP** stack:
-
-- Framing: `com.ami.kvm.jviewer.kvmpkts.IVTPPktHdr` (`HDR_SIZE`, `type`, `pktSize`, `SESSION_TOKEN_LEN`, `HASH_SIZE`)
-- Session: `ADVISER_VALIDATE_VIDEO_SESSION` → `ADVISER_VALIDATE_VIDEO_SESSION_RESPONSE` (`VALID_SESSION` / `INVALID_VIDEO_SESSION_TOKEN` / `ERR_MAX_SESSION`)
-- Challenge path: `ADVISER_GET_CHALLENGE`, hashed session token (`Failed to create hashed session token`)
-- Encryption: `ADVISER_ENABLE_ENCRYPTION` / `ADVISER_ENCRYPTION_KEY` / `ADVISER_INITIAL_ENCRYPTION_STATUS`; video `FrameHdr_RC4Enable` / `FrameHdr_RC4Reset`; `Decoder$rc4_state`; HID `KMCrypt`
-- Video: `ADVISER_VIDEO_FRAGMENT`, `ASP2000ImgHdr`, Huffman JPEG (`JPEG_*`, `Huffman_table`), YUV422/YUV444 → RGB (`Decoder$YUV*`)
-- Input: `ADVISER_HID_PKT`, USB/PS2 keyboard & mouse report classes
-
-Observed command-name constants (non-exhaustive):  
-`ADVISER_LOGIN`, `ADVISER_VIDEO_FRAGMENT`, `ADVISER_HID_PKT`, `ADVISER_REFRESH_VIDEO_SCREEN`, `ADVISER_SET_COMPRESSION_TYPE`, `ADVISER_SET_FPS`, `ADVISER_SET_BANDWIDTH`, `ADVISER_BLANK_SCREEN`, `ADVISER_PAUSE_REDIRECTION`, `ADVISER_STOP_SESSION_IMMEDIATE`, AST2K video-engine get/set, color-gain / mouse-cursor helpers.
-
-## Packet shapes (known / open)
-
-### Known at high level
+**Not** the newer MegaRAC 8-byte `uint16` opcode dialect (rd450x).
 
 ```text
-Client --TCP/7578--> Adviser
-  IVTPPktHdr { type, pktSize, ... } + payload
-  type ≈ ADVISER_VALIDATE_VIDEO_SESSION (session cookie / short token / digest)
-Server -->
-  ADVISER_VALIDATE_VIDEO_SESSION_RESPONSE
-  optional ADVISER_INITIAL_ENCRYPTION_STATUS / ENCRYPTION_KEY
-  stream of ADVISER_VIDEO_FRAGMENT (tile/JPEG/YUV, optionally RC4)
-Client -->
-  ADVISER_HID_PKT (keyboard/mouse; may be KMCrypt-wrapped)
+HDR_SIZE = 7, little-endian
+  type    uint8
+  pktSize uint32   // payload bytes after header
+  status  uint16
 ```
 
-Exact binary layout of `IVTPPktHdr` (endianness, field widths, digest algorithm) was **not** recovered without a live Java session + tcpdump or full bytecode decompilation. Integer pool around the class includes sizes such as `7`, `8`, `16`, `32` (consistent with small fixed header + token/hash lengths).
+Selected opcodes (`IVTPPktHdr`):
 
-### Open questions
+| Name | Value |
+|------|------:|
+| VIDEO_FRAGMENT | 5 |
+| HID_PKT | 6 |
+| SET_BANDWIDTH | 7 |
+| RESUME_REDIRECTION | 14 |
+| STOP_SESSION_IMMEDIATE | 25 |
+| VALIDATE_VIDEO_SESSION | 34 |
+| VALIDATE_VIDEO_SESSION_RESPONSE | 35 |
+| GET_KEYBD_LED | 121 |
 
-1. Exact `IVTPPktHdr` wire layout and command opcode numbering.
-2. How the 16-char JNLP token relates to the web session cookie / challenge response.
-3. RC4 key derivation (from encryption-key packet vs session material).
-4. Tile/fragment payload layout after `ASP2000ImgHdr` / `FrameHdr` (macroblock map, skip codes).
-5. Whether SSL wrapping is ever used on this firmware (`sslEncryption` string exists; this unit answered clear TCP on 7578 with no banner).
+`SESSION_TOKEN_LEN` / `HASH_SIZE` = 16. Validate body = `MD5(UTF-8 secret)` (16 bytes). Response body byte: `0` = reject, nonzero = OK.
 
-## Implementation in this repo
+Video fragment payload: `uint16` frag number (LE); bit `0x8000` = last fragment; low bits `0` = start of frame.
 
-mIPMI speaks IVTP on the server and exposes RFB to the browser:
+## Frame layout
 
-| Piece | Location |
-|-------|----------|
-| AMI web login + JNLP args | `internal/amiweb` |
-| IVTP session, codec, HID | `internal/kvm` (+ `internal/kvm/codec`) |
-| RFB for noVNC | `internal/rfb` |
-| HTTP `/kvm` + `/ws/kvm` | `internal/httpapi` |
-| Browser viewer | vendored noVNC under `internal/ui/static/novnc` |
+```text
+[0:39]    VideoHdr — signature "ASP-2000" at [19:27]
+[39:125]  ASP2000ImgHdr (86 bytes; same field order as later VideoHeader)
+[125:]    compressed tiles
+```
 
-Still evolving: KMCrypt-wrapped HID, some Adviser control messages, and edge cases around encrypted video frames. SOL on `/console` remains the more mature remote console path.
+Newer MegaRAC may omit the 39-byte wrapper; the decoder accepts both.
+
+## HID
+
+IVTP type 6 + 32-byte IUSB header + data-length + USB report (see `internal/kvm/hid.go`). Offsets are relative to the **7-byte** IVTP header.
+
+## Attribution
+
+IVTP/codec ideas adapted from MIT-licensed [rd450x-console](https://github.com/BadCoder1337/rd450x-console); Tyan wire format recovered from this BMC’s `JViewer.jar`.
 
 ## Related
 
-- [bmc-recon.md](bmc-recon.md) — BMC inventory
-- UI: `/kvm` (noVNC), `/console` (SOL)
+- [bmc-recon.md](bmc-recon.md)
+- UI: `/kvm` (noVNC), SOL: `/console`

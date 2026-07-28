@@ -16,7 +16,8 @@ func TestParseJNLPPositionalCorrupt(t *testing.T) {
   </application-desc>
 </jnlp>`
 	args := amiweb.ParseJNLPArgs(body, "fallback")
-	if args["kvmtoken"] != "ABC123token" {
+	// Adviser registers TOKEN+"\x02" (the corrupt separator stays on the secret).
+	if args["kvmtoken"] != "ABC123token\x02" {
 		t.Fatalf("kvmtoken=%q args=%v", args["kvmtoken"], args)
 	}
 	if args["webcookie"] != "SessionCookieValue000" {
