@@ -152,10 +152,19 @@
 
   /* —— Controls —— */
   .theme-toggle {
-    @apply cursor-pointer rounded-sm border border-border bg-surface-2 px-2.5 py-1.5 text-left text-xs text-muted;
+    @apply inline-flex size-8 cursor-pointer items-center justify-center rounded-sm border border-border bg-surface-2 p-0 text-muted;
   }
   .theme-toggle:hover {
     @apply border-accent-dim text-fg;
+  }
+  .theme-icon {
+    @apply block;
+  }
+  [data-theme="dark"] .theme-icon-moon {
+    @apply hidden;
+  }
+  [data-theme="light"] .theme-icon-sun {
+    @apply hidden;
   }
 
   .inline {

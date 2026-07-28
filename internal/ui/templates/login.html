@@ -25,11 +25,14 @@
 </head>
 <body class="login-body">
   <div class="login-shell">
-    <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false">Theme</button>
+    <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" aria-label="Switch theme" title="Switch theme">
+      <svg class="theme-icon theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="theme-icon theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1 1 9.5 3 7 7 0 0 0 21 14.5z"/></svg>
+    </button>
     <main class="login-panel">
       <p class="brand hero-brand"><img class="brand-mark" src="/static/img/outband.svg" width="36" height="36" alt="">Outband</p>
       <p class="tagline">Out-of-band. In browser.</p>
-      <p class="lede">Managing {{.BMCHost}}. BMC credentials stay on the server.</p>
+      <p class="lede">BMC credentials stay on the server.</p>
       {{if .Error}}<p class="err" role="alert">{{.Error}}</p>{{end}}
       {{if .OIDCEnabled}}
       <p><a class="btn primary" href="/auth/oidc/login">Sign in with SSO</a></p>

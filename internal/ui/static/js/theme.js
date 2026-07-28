@@ -32,11 +32,12 @@
   }
 
   function syncToggles(theme) {
-    var label = theme === "light" ? "Dark mode" : "Light mode";
+    var next = theme === "light" ? "dark" : "light";
+    var label = "Switch to " + next + " theme";
     document.querySelectorAll("[data-theme-toggle]").forEach(function (btn) {
       btn.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
-      btn.textContent = label;
-      btn.title = "Switch to " + (theme === "light" ? "dark" : "light") + " theme";
+      btn.setAttribute("aria-label", label);
+      btn.title = label;
     });
   }
 
