@@ -83,7 +83,15 @@ docker pull ghcr.io/theminecraftguyguru/mipmi:alpha
 docker pull ghcr.io/theminecraftguyguru/mipmi:v0.1.0-alpha.1
 ```
 
-Run with the same env vars as Compose (`MIPMI_UI_PASS`, BMC credentials or `MIPMI_HOSTS`, etc.). Package pages: [ghcr.io/theminecraftguyguru/mipmi](https://github.com/TheMinecraftGuyGuru/mipmi/pkgs/container/mipmi).
+If the package is still private (GHCR default until flipped once in the UI), authenticate first:
+
+```bash
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u USERNAME --password-stdin
+```
+
+Then open [Package settings](https://github.com/users/TheMinecraftGuyGuru/packages/container/mipmi/settings) → **Change visibility** → **Public** (matches this public repo). Package page: [ghcr.io/theminecraftguyguru/mipmi](https://github.com/TheMinecraftGuyGuru/mipmi/pkgs/container/mipmi).
+
+Run with the same env vars as Compose (`MIPMI_UI_PASS`, BMC credentials or `MIPMI_HOSTS`, etc.).
 
 ## Layout
 
