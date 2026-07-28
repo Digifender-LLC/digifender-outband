@@ -1,0 +1,36 @@
+services:
+  mipmi:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      MIPMI_LISTEN: ":8080"
+      MIPMI_UI_PASS: "${MIPMI_UI_PASS:?set MIPMI_UI_PASS}"
+      MIPMI_DATA_DIR: /data
+      # Legacy single-host (still works). For multi-host JSON inventory, unset these
+      # and set MIPMI_HOSTS / MIPMI_DEFAULT_HOST instead — see below.
+      MIPMI_BMC_HOST: "${MIPMI_BMC_HOST:-192.168.9.74}"
+      MIPMI_BMC_USER: "${MIPMI_BMC_USER:-root}"
+      MIPMI_BMC_PASS: "${MIPMI_BMC_PASS:?set MIPMI_BMC_PASS}"
+      # Example multi-host inventory (Compose substitutes ${MIPMI_BMC_PASS}):
+      # MIPMI_DEFAULT_HOST: tyan
+      # MIPMI_HOSTS: |
+      #   [
+      #     {
+      #       "id": "tyan",
+      #       "name": "Tyan BMC",
+      #       "provider": "ipmi",
+      #       "host": "192.168.9.74",
+      #       "port": 623,
+      #       "user": "root",
+      #       "password": "${MIPMI_BMC_PASS}"
+      #     }
+      #   ]
+    volumes:
+      - mipmi-data:/data
+    # Host networking can help IPMI UDP on some LAN setups:
+    # network_mode: host
+    restart: unless-stopped
+
+volumes:
+  mipmi-data:
