@@ -30,7 +30,7 @@ Env prefix is `OUTBAND_*`, binary `outband`.
 | `internal/amiweb` | AMI MegaRAC web login / JNLP launch args |
 | `internal/kvm` | IVTP session, video decode, HID uplink, RFB bridge |
 | `internal/rfb` | Minimal RFB server for noVNC |
-| `docs/` | BMC recon, [AMT](docs/amt.md), [AMT KVM](docs/amt-kvm.md), [iLO](docs/ilo.md), [iLO KVM](docs/ilo-kvm.md), [iDRAC](docs/idrac.md), KVM protocol, provider guide |
+| `docs/` | BMC recon, [hardware matrix](docs/hardware-matrix.md), [AMT](docs/amt.md), [AMT KVM](docs/amt-kvm.md), [iLO](docs/ilo.md), [iLO KVM](docs/ilo-kvm.md), [iDRAC](docs/idrac.md), KVM protocol, provider guide |
 | `scripts/` | Ad-hoc verify/probe tools (`//go:build ignore`) |
 | `flake.nix` / `flake.lock` | Nix flake (`buildGoModule`, Go 1.25) |
 

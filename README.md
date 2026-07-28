@@ -158,6 +158,7 @@ Session cookie: `outband_session` (12h). BMC credentials never reach the browser
 | Doc | Topic |
 |-----|--------|
 | [AGENTS.md](AGENTS.md) | Contributor / agent guide |
+| [docs/hardware-matrix.md](docs/hardware-matrix.md) | Tested hosts / compatibility reports |
 | [docs/bmc-recon.md](docs/bmc-recon.md) | Reference BMC notes |
 | [docs/amt.md](docs/amt.md) | Intel AMT |
 | [docs/amt-kvm.md](docs/amt-kvm.md) | AMT Hardware-KVM / redirection |
