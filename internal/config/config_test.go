@@ -404,9 +404,9 @@ func TestAuthOIDCWithoutPassword(t *testing.T) {
 	t.Setenv("OUTBAND_UI_PASS", "")
 	t.Setenv("OUTBAND_DEFAULT_HOST", "a")
 	t.Setenv("OUTBAND_OIDC_ISSUER", "https://idp.example")
-	t.Setenv("OUTBAND_OIDC_CLIENT_ID", "mipmi")
+	t.Setenv("OUTBAND_OIDC_CLIENT_ID", "outband")
 	t.Setenv("OUTBAND_OIDC_CLIENT_SECRET", "secret")
-	t.Setenv("OUTBAND_OIDC_REDIRECT_URL", "https://mipmi.example/auth/oidc/callback")
+	t.Setenv("OUTBAND_OIDC_REDIRECT_URL", "https://outband.example/auth/oidc/callback")
 
 	cfg, err := config.Load(nil)
 	if err != nil {

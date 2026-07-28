@@ -1,8 +1,8 @@
-# Example multi-host inventory for MIPMI_HOSTS_FILE.
+# Example multi-host inventory for OUTBAND_HOSTS_FILE.
 # Copy to hosts.yaml (gitignored), fill in password, then:
-#   export MIPMI_HOSTS_FILE=./hosts.yaml
-#   export MIPMI_UI_PASS='...'
-#   go run ./cmd/mipmi
+#   export OUTBAND_HOSTS_FILE=./hosts.yaml
+#   export OUTBAND_UI_PASS='...'
+#   go run ./cmd/outband
 #
 # sensor_names maps exact BMC/SDR names → human-readable UI / telemetry labels.
 

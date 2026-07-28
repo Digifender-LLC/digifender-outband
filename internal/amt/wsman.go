@@ -82,7 +82,7 @@ func (c *wsmanClient) post(ctx context.Context, body string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/soap+xml;charset=UTF-8")
-	req.Header.Set("User-Agent", "mipmi-amt")
+	req.Header.Set("User-Agent", "outband-amt")
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err

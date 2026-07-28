@@ -72,7 +72,7 @@ When both a typed nest and `options` exist for the same concern, **typed wins** 
       droplet_id: 123
 ```
 
-### JSON (`MIPMI_HOSTS`) example
+### JSON (`OUTBAND_HOSTS`) example
 
 ```json
 [
@@ -103,7 +103,7 @@ HTTP nav/routes return 501 for missing features; the telemetry collector skips t
 ## Checklist
 
 - [ ] Package under `internal/<name>/` implements `Client` + `Capabilities`
-- [ ] Factory registered; blank-import in `cmd/mipmi`
+- [ ] Factory registered; blank-import in `cmd/outband`
 - [ ] Provider-specific knobs under typed nest or `options.<name>`
 - [ ] Unit tests without a live backend
 - [ ] `go test ./...`

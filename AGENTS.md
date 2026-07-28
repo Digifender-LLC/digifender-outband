@@ -8,7 +8,7 @@ Outband is a Go + HTMX front-end for BMC management (out-of-band). It exposes da
 
 Provider internals stay vendor-agnostic (`internal/bmc` + `internal/provider`). Shipping providers: IPMI (`internal/ipmi`), Intel AMT (`internal/amt`), HPE iLO Redfish (`internal/ilo`). iDRAC is a registered stub only.
 
-Formerly **mIPMI**; env prefix is `OUTBAND_*`, binary `outband`.
+Env prefix is `OUTBAND_*`, binary `outband`.
 
 ## Layout
 

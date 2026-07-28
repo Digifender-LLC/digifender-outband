@@ -1,6 +1,6 @@
 // Package examplehost is a copy-paste skeleton for in-tree BMC providers.
 //
-// It is intentionally NOT blank-imported from cmd/mipmi. Import it from tests
+// It is intentionally NOT blank-imported from cmd/outband. Import it from tests
 // or add `_ "outband/internal/examplehost"` in main when wiring a real backend
 // modeled on this package. See docs/providers.md.
 package examplehost
@@ -72,7 +72,7 @@ func (c *Client) MCInfo(ctx context.Context) (*bmc.MCInfo, error) {
 	return &bmc.MCInfo{
 		FirmwareRev:     "0.0.0",
 		ProtocolVersion: "example",
-		Manufacturer:    "mIPMI",
+		Manufacturer:    "Outband",
 		Model:           model,
 	}, nil
 }
