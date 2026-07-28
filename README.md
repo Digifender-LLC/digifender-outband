@@ -1,12 +1,22 @@
-# Outband
+<p align="center">
+  <img src="internal/ui/static/img/outband.svg" alt="Outband" width="96" height="96">
+</p>
 
-**Browser BMC for every vendor.**
+<h1 align="center">Outband</h1>
+
+<p align="center"><strong>Browser BMC for every vendor.</strong></p>
 
 Outband is a Go + HTMX control plane for out-of-band server management. Power, sensors, SEL, serial console, and KVM — without Java applets, vendor portals, or BMC passwords in the browser.
 
 IPMI, AMT, iLO, and multi-gen iDRAC. One UI, provider-agnostic internals.
 
-[Quick start](#quick-start) · [Features](#features) · [Providers](#providers) · [Deploy](#deploy) · [Docs](#docs)
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#providers">Providers</a> ·
+  <a href="#deploy">Deploy</a> ·
+  <a href="#docs">Docs</a>
+</p>
 
 ---
 
