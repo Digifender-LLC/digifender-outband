@@ -2,14 +2,29 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{if .Title}}{{.Title}} · {{end}}mIPMI</title>
+<script>
+(function () {
+  try {
+    var k = "mipmi-theme";
+    var t = localStorage.getItem(k);
+    if (t !== "light" && t !== "dark") {
+      t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {
+    document.documentElement.setAttribute("data-theme", "dark");
+  }
+})();
+</script>
 <link rel="stylesheet" href="/static/css/app.css">
 <script src="/static/vendor/htmx.min.js" defer></script>
+<script src="/static/js/theme.js" defer></script>
 {{end}}
 
-{{define "nav"}}
-<header class="top">
-  <a class="brand" href="/">mIPMI</a>
-  <nav class="nav">
+{{define "sidebar"}}
+<aside class="sidebar" id="app-sidebar" aria-label="Primary">
+  <a class="sidebar-brand" href="/">mIPMI</a>
+  <nav class="sidebar-nav">
     <a href="/" {{if eq .Active "dashboard"}}aria-current="page"{{end}}>Dashboard</a>
     {{if .ShowPower}}<a href="/power" {{if eq .Active "power"}}aria-current="page"{{end}}>Power</a>{{end}}
     {{if .ShowSensors}}<a href="/sensors" {{if eq .Active "sensors"}}aria-current="page"{{end}}>Sensors</a>{{end}}
@@ -18,11 +33,19 @@
     {{if .ShowConsole}}<a href="/console" {{if eq .Active "console"}}aria-current="page"{{end}}>Console</a>{{end}}
     {{if .ShowKVM}}<a href="/kvm" {{if eq .Active "kvm"}}aria-current="page"{{end}}>KVM</a>{{end}}
   </nav>
-  <div class="top-meta">
-    <span class="host">{{.BMCHost}}</span>
+  <div class="sidebar-footer">
+    <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false">Theme</button>
     <form method="post" action="/logout" class="inline">
       <button type="submit" class="linkish">Logout</button>
     </form>
   </div>
+</aside>
+{{end}}
+
+{{define "topbar"}}
+<header class="topbar">
+  <button type="button" class="menu-toggle" data-drawer-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Open navigation">☰</button>
+  <span class="topbar-host" title="{{.BMCHost}}">{{.BMCHost}}</span>
 </header>
+<button type="button" class="sidebar-backdrop" data-drawer-close aria-label="Close navigation" tabindex="-1"></button>
 {{end}}

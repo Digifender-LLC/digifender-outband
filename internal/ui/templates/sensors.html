@@ -3,9 +3,10 @@
 <html lang="en">
 <head>{{template "head" .}}</head>
 <body>
-  <div class="shell">
-    {{template "nav" .}}
-    <main class="main">
+  <div class="app">
+    {{template "sidebar" .}}
+    {{template "topbar" .}}
+    <main class="content">
       <section class="page">
         <header class="page-head">
           <h1>Sensors</h1>

@@ -4,7 +4,10 @@
      hx-trigger="every 4s"
      hx-swap="outerHTML">
   {{if .Power}}
-  <p class="power-line">Chassis power: <strong class="{{if .Power.IsOn}}on{{else}}off{{end}}">{{powerLabel .Power.IsOn}}</strong></p>
+  <div class="stat">
+    <span class="stat-label">Chassis power</span>
+    <span class="stat-value {{if .Power.IsOn}}on{{else}}off{{end}}">{{powerLabel .Power.IsOn}}</span>
+  </div>
   <ul class="muted-list">
     <li>Restore policy: {{.Power.PowerRestorePolicy}}</li>
     <li>Power fault: {{if .Power.PowerFault}}yes{{else}}no{{end}}</li>

@@ -1,5 +1,6 @@
 {{define "partials/sensors.html"}}
 <div id="sensors-table"
+     class="panel"
      hx-get="/partials/sensors"
      hx-trigger="every 8s"
      hx-swap="outerHTML">
@@ -13,11 +14,11 @@
       <tbody>
         {{range .Sensors}}
         <tr>
-          <td class="mono">{{printf "%02x" .ID}}</td>
+          <td class="mono">{{.ID}}</td>
           <td>{{.Name}}</td>
           <td>{{.Type}}</td>
           <td class="mono">{{.Value}} {{.Unit}}</td>
-          <td>{{.Status}}</td>
+          <td><span class="badge {{lower .Status}}">{{.Status}}</span></td>
         </tr>
         {{else}}
         <tr><td colspan="5" class="muted">{{if .Warming}}Waiting for collector…{{else}}No sensors returned.{{end}}</td></tr>

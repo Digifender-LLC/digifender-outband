@@ -2,10 +2,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>{{template "head" .}}</head>
-<body class="console-body">
-  <div class="shell console-shell">
-    {{template "nav" .}}
-    <main class="main console-main">
+<body>
+  <div class="app">
+    {{template "sidebar" .}}
+    {{template "topbar" .}}
+    <main class="content bleed">
       <header class="page-head compact">
         <h1>KVM</h1>
         <p class="lede">Native AMI Adviser/IVTP video console via noVNC. One session at a time.</p>

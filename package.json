@@ -1,0 +1,12 @@
+{
+  "name": "mipmi",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./internal/ui/static/css/src.css -o ./internal/ui/static/css/app.css --minify",
+    "watch:css": "tailwindcss -i ./internal/ui/static/css/src.css -o ./internal/ui/static/css/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.11",
+    "tailwindcss": "^4.1.11"
+  }
+}

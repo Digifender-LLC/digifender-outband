@@ -8,10 +8,11 @@
   <script src="/static/vendor/xterm-addon-fit.js" defer></script>
   <script src="/static/js/console.js" defer></script>
 </head>
-<body class="console-body">
-  <div class="shell console-shell">
-    {{template "nav" .}}
-    <main class="main console-main">
+<body>
+  <div class="app">
+    {{template "sidebar" .}}
+    {{template "topbar" .}}
+    <main class="content bleed">
       <header class="page-head compact">
         <h1>SOL Console</h1>
         <p class="lede">Serial-over-LAN via IPMI — not video KVM. One session per mIPMI process.</p>

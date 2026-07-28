@@ -3,43 +3,72 @@
 <html lang="en">
 <head>
   {{template "head" .}}
-  <link rel="stylesheet" href="/static/vendor/uPlot.min.css">
-  <script src="/static/vendor/uPlot.min.js" defer></script>
+  <script src="/static/vendor/chart.umd.min.js" defer></script>
   <script src="/static/js/metrics.js" defer></script>
 </head>
 <body>
-  <div class="shell">
-    {{template "nav" .}}
-    <main class="main metrics-main">
+  <div class="app">
+    {{template "sidebar" .}}
+    {{template "topbar" .}}
+    <main class="content">
       <section class="page">
         <header class="page-head">
           <h1>Metrics</h1>
           <p class="lede">Historical sensor samples from the background collector (SQLite).</p>
         </header>
-        <form id="metrics-form" class="metrics-controls" method="get" action="/metrics">
-          <label>
-            Range
-            <select name="range" id="metrics-range">
-              <option value="15m" {{if eq .Range "15m"}}selected{{end}}>15 minutes</option>
-              <option value="1h" {{if eq .Range "1h"}}selected{{end}}>1 hour</option>
-              <option value="6h" {{if eq .Range "6h"}}selected{{end}}>6 hours</option>
-              <option value="24h" {{if eq .Range "24h"}}selected{{end}}>24 hours</option>
-            </select>
-          </label>
-          <fieldset class="sensor-picks">
-            <legend>Sensors</legend>
-            {{range $name := .Sensors}}
-            <label class="check">
-              <input type="checkbox" name="sensor" value="{{$name}}"{{range $.Selected}}{{if eq . $name}} checked{{end}}{{end}}>
-              <span>{{$name}}</span>
+
+        <form id="metrics-form" class="metrics-form" method="get" action="/metrics">
+          <div class="metrics-toolbar panel">
+            <label class="metrics-field">
+              Range
+              <select name="range" id="metrics-range">
+                <option value="15m" {{if eq .Range "15m"}}selected{{end}}>15 minutes</option>
+                <option value="1h" {{if eq .Range "1h"}}selected{{end}}>1 hour</option>
+                <option value="6h" {{if eq .Range "6h"}}selected{{end}}>6 hours</option>
+                <option value="24h" {{if eq .Range "24h"}}selected{{end}}>24 hours</option>
+              </select>
             </label>
-            {{else}}
-            <p class="muted">No samples yet — wait for the collector to poll.</p>
-            {{end}}
-          </fieldset>
-          <button class="btn primary" type="submit">Update</button>
+            <label class="metrics-field metrics-search">
+              Filter
+              <input type="search" id="metrics-filter" placeholder="Filter sensors…" autocomplete="off" spellcheck="false">
+            </label>
+            <div class="metrics-toolbar-actions">
+              <button type="button" class="btn" id="metrics-clear" {{if not .Sensors}}disabled{{end}}>Clear</button>
+              <button type="submit" class="btn primary" id="metrics-apply">Apply</button>
+            </div>
+          </div>
+
+          <div class="panel metrics-picker">
+            <div class="metrics-selected">
+              <div class="metrics-selected-head">
+                <h2 class="subhead">Selected</h2>
+                <span id="metrics-count" class="muted mono">0</span>
+              </div>
+              <div id="metrics-chips" class="metrics-chips" aria-live="polite">
+                <span class="muted metrics-chips-empty">None selected — pick sensors below.</span>
+              </div>
+            </div>
+
+            <div class="metrics-available">
+              <h2 class="subhead">Sensors</h2>
+              {{if .Sensors}}
+              <div class="sensor-list" id="sensor-list" role="group" aria-label="Available sensors">
+                {{range $name := .Sensors}}
+                <label class="sensor-item" data-name="{{$name}}">
+                  <input type="checkbox" name="sensor" value="{{$name}}"{{range $.Selected}}{{if eq . $name}} checked{{end}}{{end}}>
+                  <span class="sensor-item-name">{{$name}}</span>
+                </label>
+                {{end}}
+              </div>
+              <p id="metrics-filter-empty" class="muted metrics-filter-empty" hidden>No sensors match the filter.</p>
+              {{else}}
+              <p class="muted">No samples yet — wait for the collector to poll.</p>
+              {{end}}
+            </div>
+          </div>
         </form>
-        <div id="metrics-status" class="muted" role="status"></div>
+
+        <div id="metrics-status" class="muted metrics-status" role="status"></div>
         <div id="metrics-chart" class="metrics-chart" aria-label="Sensor history chart"></div>
         <script type="application/json" id="metrics-bootstrap">
           {"range":{{printf "%q" .Range}},"sensors":[{{range $i, $s := .Selected}}{{if $i}},{{end}}{{printf "%q" $s}}{{end}}]}

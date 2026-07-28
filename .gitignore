@@ -12,3 +12,4 @@ data/
 .cursor/
 result
 result-*
+node_modules/

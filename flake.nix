@@ -59,6 +59,7 @@
           packages = [
             pkgs.go_1_25
             pkgs.git
+            pkgs.nodejs_22
           ];
         };
       }

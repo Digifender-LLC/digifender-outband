@@ -20,7 +20,7 @@ Provider internals are meant to stay vendor-agnostic (`internal/bmc` + `internal
 | `internal/hosts` | Live host registry (active host selection) |
 | `internal/httpapi` | HTMX routes, auth gate, SOL + KVM WebSockets |
 | `internal/telemetry` | Host-keyed SQLite store + background poller |
-| `internal/ui` | Templates + vendored static assets (HTMX, xterm, noVNC) |
+| `internal/ui` | Templates + Tailwind CSS (`src.css` → `app.css`) + vendored static assets (HTMX, xterm, noVNC) |
 | `internal/amiweb` | AMI MegaRAC web login / JNLP launch args |
 | `internal/kvm` | IVTP session, video decode, HID uplink, RFB bridge |
 | `internal/rfb` | Minimal RFB server for noVNC |
@@ -45,7 +45,9 @@ go test ./...
 
 Docker: see `README.md` and `docker-compose.yml`. Prefer `MIPMI_HOSTS` JSON inventory when running under Compose.
 
-Nix: `nix build` / `nix run` / `nix develop` via the repo flake. Update `vendorHash` in `flake.nix` when Go module deps change.
+Nix: `nix build` / `nix run` / `nix develop` via the repo flake (`nodejs` is in the dev shell for CSS). Update `vendorHash` in `flake.nix` when Go module deps change.
+
+UI CSS is Tailwind v4. After editing `internal/ui/static/css/src.css`, run `npm run build:css` and commit the generated `app.css` (Go/Docker builds embed that file and do not run Node).
 
 Verification helpers under `scripts/` are not part of the main module build (`//go:build ignore`). Run them with `go run scripts/verify_bmc.go` (etc.). They read credentials from the environment.
 
@@ -57,7 +59,7 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 - **Providers behind `bmc.Client`.** New vendor support goes through the registry — do not special-case iDRAC/AMT/IPMI in the HTTP layer.
 - **Unimplemented inventory hosts are skipped.** Stub providers (`idrac`/`amt`) return `provider.ErrNotImplemented`; `hosts.Open` warns and continues. Unknown providers and a stub `MIPMI_DEFAULT_HOST` still fail startup. At least one usable host is required.
 - **Capabilities drive UI and polling.** Implement `bmc.Capabilities` and omit unsupported bits (`FeatureConsole`, etc.). HTTP nav/routes and the telemetry collector consult `bmc.ClientFeatures`; missing features are hidden / skipped (501 if hit directly). IPMI advertises the control plane only; **`FeatureKVM` comes from inventory `kvm` config** on the active host. SOL is via optional `bmc.Console` (advertised with `FeatureConsole`), not part of `bmc.Client`.
-- **Provider-specific inventory options** nest under `ipmi` / `kvm` on each host (flat `cipher_suite` / `kvm_*` still migrate). Do not put vendor knobs on the shared top-level host fields for new code.
+- **Provider-specific inventory options** nest under `ipmi` / `kvm` on each host. Do not put vendor knobs on the shared top-level host fields.
 - **Host-keyed telemetry.** Store and collector keys are host IDs; the UI still binds one active host for now.
 - **One SOL session / one KVM session** per process (or per active host adapter). Second clients should get a clear busy/conflict response.
 - **Tests.** Prefer table-driven unit tests next to the package (`*_test.go`). Do not require a live BMC for `go test ./...`.

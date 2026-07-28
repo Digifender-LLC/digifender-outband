@@ -2,30 +2,53 @@
 <div id="dashboard-inner">
   {{if .Warming}}<p class="muted" role="status">Warming telemetry store…</p>{{end}}
   {{if .ErrMsg}}<p class="err" role="alert">{{.ErrMsg}}</p>{{end}}
-  {{if .Info}}
-  <dl class="facts">
-    <div><dt>Manufacturer</dt><dd>{{.Info.Manufacturer}} ({{.Info.ManufacturerID}})</dd></div>
-    <div><dt>Product ID</dt><dd>{{.Info.ProductID}}</dd></div>
-    <div><dt>Firmware</dt><dd>{{.Info.FirmwareRev}}</dd></div>
-    <div><dt>Protocol</dt><dd>{{.Info.ProtocolVersion}}</dd></div>
-  </dl>
-  {{end}}
-  {{if .Power}}
-  <p class="power-line">Chassis power: <strong class="{{if .Power.IsOn}}on{{else}}off{{end}}">{{powerLabel .Power.IsOn}}</strong>
-    <span class="muted">restore {{.Power.PowerRestorePolicy}}</span>
-  </p>
-  {{end}}
-  {{if .Temps}}
-  <h2 class="subhead">Temps</h2>
-  <ul class="reading-list">
-    {{range .Temps}}<li><span>{{.Name}}</span><span class="val">{{.Value}} {{.Unit}}</span></li>{{end}}
-  </ul>
-  {{end}}
-  {{if .Fans}}
-  <h2 class="subhead">Fans</h2>
-  <ul class="reading-list">
-    {{range .Fans}}<li><span>{{.Name}}</span><span class="val">{{.Value}} {{.Unit}}</span></li>{{end}}
-  </ul>
-  {{end}}
+  <div class="panel-grid dashboard-grid">
+    <div class="panel">
+      <h2 class="subhead">BMC</h2>
+      {{if .Info}}
+      <dl class="facts">
+        <div><dt>Manufacturer</dt><dd>{{.Info.Manufacturer}}{{if .Info.ManufacturerID}} ({{.Info.ManufacturerID}}){{end}}</dd></div>
+        {{if .Info.Model}}<div><dt>Model</dt><dd>{{.Info.Model}}</dd></div>{{end}}
+        {{if .Info.ProductID}}<div><dt>Product ID</dt><dd>{{.Info.ProductID}}</dd></div>{{end}}
+        <div><dt>Firmware</dt><dd>{{.Info.FirmwareRev}}</dd></div>
+        <div><dt>Protocol</dt><dd>{{.Info.ProtocolVersion}}</dd></div>
+      </dl>
+      {{else}}
+      <p class="muted">No identity data yet.</p>
+      {{end}}
+    </div>
+    <div class="panel">
+      <h2 class="subhead">Power</h2>
+      {{if .Power}}
+      <div class="stat">
+        <span class="stat-label">Chassis</span>
+        <span class="stat-value {{if .Power.IsOn}}on{{else}}off{{end}}">{{powerLabel .Power.IsOn}}</span>
+        <span class="stat-meta">restore {{.Power.PowerRestorePolicy}}</span>
+      </div>
+      {{else}}
+      <p class="muted">No power status yet.</p>
+      {{end}}
+    </div>
+    <div class="panel">
+      <h2 class="subhead">Temps</h2>
+      {{if .Temps}}
+      <ul class="reading-list">
+        {{range .Temps}}<li><span>{{.Name}}</span><span class="val">{{.Value}} {{.Unit}}</span></li>{{end}}
+      </ul>
+      {{else}}
+      <p class="muted">No temperature readings.</p>
+      {{end}}
+    </div>
+    <div class="panel">
+      <h2 class="subhead">Fans</h2>
+      {{if .Fans}}
+      <ul class="reading-list">
+        {{range .Fans}}<li><span>{{.Name}}</span><span class="val">{{.Value}} {{.Unit}}</span></li>{{end}}
+      </ul>
+      {{else}}
+      <p class="muted">No fan readings.</p>
+      {{end}}
+    </div>
+  </div>
 </div>
 {{end}}

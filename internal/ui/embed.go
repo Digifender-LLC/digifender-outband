@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -30,6 +31,7 @@ func ParseTemplates() (*template.Template, error) {
 			}
 			return "OFF"
 		},
+		"lower": strings.ToLower,
 	}
 	return template.New("").Funcs(funcMap).ParseFS(templateFS,
 		"templates/*.html",

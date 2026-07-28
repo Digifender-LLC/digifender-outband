@@ -5,21 +5,39 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Login · mIPMI</title>
+  <script>
+  (function () {
+    try {
+      var k = "mipmi-theme";
+      var t = localStorage.getItem(k);
+      if (t !== "light" && t !== "dark") {
+        t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      }
+      document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  })();
+  </script>
   <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/theme.js" defer></script>
 </head>
 <body class="login-body">
-  <main class="login-panel">
-    <p class="brand hero-brand">mIPMI</p>
-    <p class="lede">BMC control for {{.BMCHost}}. Enter the UI password — BMC credentials stay on the server.</p>
-    {{if .Error}}<p class="err" role="alert">{{.Error}}</p>{{end}}
-    <form method="post" action="/login" class="login-form">
-      <label>
-        UI password
-        <input type="password" name="password" autocomplete="current-password" required autofocus>
-      </label>
-      <button type="submit" class="btn primary">Enter</button>
-    </form>
-  </main>
+  <div class="login-shell">
+    <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false">Theme</button>
+    <main class="login-panel">
+      <p class="brand hero-brand">mIPMI</p>
+      <p class="lede">BMC control for {{.BMCHost}}. Enter the UI password — BMC credentials stay on the server.</p>
+      {{if .Error}}<p class="err" role="alert">{{.Error}}</p>{{end}}
+      <form method="post" action="/login" class="login-form">
+        <label>
+          UI password
+          <input type="password" name="password" autocomplete="current-password" required autofocus>
+        </label>
+        <button type="submit" class="btn primary">Enter</button>
+      </form>
+    </main>
+  </div>
 </body>
 </html>
 {{end}}

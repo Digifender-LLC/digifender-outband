@@ -1,5 +1,6 @@
 {{define "partials/sel.html"}}
 <div id="sel-table"
+     class="panel"
      hx-get="/partials/sel"
      hx-trigger="every 15s"
      hx-swap="outerHTML">
@@ -13,11 +14,11 @@
       <tbody>
         {{range .Entries}}
         <tr>
-          <td class="mono">{{printf "%04x" .ID}}</td>
+          <td class="mono">{{.ID}}</td>
           <td class="mono">{{fmtTime .Timestamp}}</td>
           <td>{{.SensorName}}</td>
           <td>{{.Description}}</td>
-          <td>{{.Severity}}</td>
+          <td><span class="badge {{lower .Severity}}">{{.Severity}}</span></td>
         </tr>
         {{else}}
         <tr><td colspan="5" class="muted">{{if .Warming}}Waiting for collector…{{else}}No SEL entries.{{end}}</td></tr>
