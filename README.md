@@ -192,12 +192,6 @@ npm run build:css    # writes app.css (committed; Go/Docker/Nix do not run Node)
 
 ---
 
-## Migrating from mIPMI
-
-This project was formerly **mIPMI**. Rename env vars `MIPMI_*` → `OUTBAND_*`, binary `mipmi` → `outband`, and session cookie `mipmi_session` → `outband_session`. Inventory JSON shape is unchanged.
-
----
-
 ## License
 
 Outband is MIT-licensed — see [LICENSE](LICENSE). Third-party notices (including MIT-derived KVM/IVTP ideas from [rd450x-console](https://github.com/BadCoder1337/rd450x-console) and vendored noVNC) are in [NOTICE](NOTICE).
