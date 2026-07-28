@@ -10,3 +10,5 @@ data/
 *.db
 *.db-*
 .cursor/
+result
+result-*
