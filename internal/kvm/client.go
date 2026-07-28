@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"mipmi/internal/kvm/codec"
+	"outband/internal/kvm/codec"
 )
 
 const keepAliveInterval = 5 * time.Second

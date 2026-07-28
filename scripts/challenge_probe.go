@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	"mipmi/internal/amiweb"
+	"outband/internal/amiweb"
 )
 
 func readPkt(conn net.Conn) (byte, uint16, []byte, error) {
@@ -42,7 +42,7 @@ func send(conn net.Conn, typ byte, body []byte) error {
 
 func main() {
 	host := "192.168.9.74"
-	pass := os.Getenv("MIPMI_BMC_PASS")
+	pass := os.Getenv("OUTBAND_BMC_PASS")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	args, cookie, err := amiweb.FetchLaunchArgs(ctx, host, "root", pass)

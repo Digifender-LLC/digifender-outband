@@ -8,8 +8,8 @@ import (
 	"net"
 	"sync"
 
-	"mipmi/internal/kvm/codec"
-	"mipmi/internal/rfb"
+	"outband/internal/kvm/codec"
+	"outband/internal/rfb"
 )
 
 // ErrBusy is returned when another KVM session is already active.

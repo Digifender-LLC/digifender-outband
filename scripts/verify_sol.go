@@ -9,19 +9,19 @@ import (
 	"os"
 	"time"
 
-	"mipmi/internal/ipmi"
+	"outband/internal/ipmi"
 )
 
 func main() {
-	pass := os.Getenv("MIPMI_BMC_PASS")
+	pass := os.Getenv("OUTBAND_BMC_PASS")
 	if pass == "" {
-		fmt.Fprintln(os.Stderr, "MIPMI_BMC_PASS required")
+		fmt.Fprintln(os.Stderr, "OUTBAND_BMC_PASS required")
 		os.Exit(2)
 	}
 	a := ipmi.New(ipmi.Config{
-		Host:     env("MIPMI_BMC_HOST", "192.168.9.74"),
+		Host:     env("OUTBAND_BMC_HOST", "192.168.9.74"),
 		Port:     623,
-		User:     env("MIPMI_BMC_USER", "root"),
+		User:     env("OUTBAND_BMC_USER", "root"),
 		Password: pass,
 		CipherID: -1,
 	})

@@ -1,9 +1,9 @@
 package ipmi
 
 import (
-	"mipmi/internal/bmc"
-	"mipmi/internal/config"
-	"mipmi/internal/provider"
+	"outband/internal/bmc"
+	"outband/internal/config"
+	"outband/internal/provider"
 )
 
 func init() {

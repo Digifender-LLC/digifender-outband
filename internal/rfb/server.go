@@ -141,7 +141,7 @@ func handshake(r *bufio.Reader, w *bufio.Writer, src Source) error {
 
 	// ServerInit
 	f := src.Frame()
-	if err := writeServerInit(w, f.W, f.H, "mIPMI KVM"); err != nil {
+	if err := writeServerInit(w, f.W, f.H, "Outband KVM"); err != nil {
 		return err
 	}
 	return w.Flush()

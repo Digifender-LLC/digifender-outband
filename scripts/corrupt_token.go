@@ -18,7 +18,7 @@ import (
 
 func main() {
 	host := "192.168.9.74"
-	pass := os.Getenv("MIPMI_BMC_PASS")
+	pass := os.Getenv("OUTBAND_BMC_PASS")
 	hc := &http.Client{Timeout: 20 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	form := url.Values{"WEBVAR_USERNAME": {"root"}, "WEBVAR_PASSWORD": {pass}}
 	resp, _ := hc.PostForm("http://"+host+"/rpc/WEBSES/create.asp", form)

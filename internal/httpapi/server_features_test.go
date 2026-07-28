@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"mipmi/internal/bmc"
-	"mipmi/internal/config"
-	"mipmi/internal/hosts"
-	"mipmi/internal/telemetry"
+	"outband/internal/bmc"
+	"outband/internal/config"
+	"outband/internal/hosts"
+	"outband/internal/telemetry"
 )
 
 // featureClient advertises power/sensors/SEL/identity but not console or KVM.

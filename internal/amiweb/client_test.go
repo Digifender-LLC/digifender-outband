@@ -3,7 +3,7 @@ package amiweb_test
 import (
 	"testing"
 
-	"mipmi/internal/amiweb"
+	"outband/internal/amiweb"
 )
 
 func TestParseJNLPPositionalCorrupt(t *testing.T) {

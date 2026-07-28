@@ -1,26 +1,26 @@
 services:
-  mipmi:
+  outband:
     build: .
     ports:
       - "8080:8080"
     environment:
-      MIPMI_LISTEN: ":8080"
-      MIPMI_UI_PASS: "${MIPMI_UI_PASS:?set MIPMI_UI_PASS}"
-      MIPMI_DATA_DIR: /data
-      # Optional OIDC SSO (when set, MIPMI_UI_PASS can be break-glass only;
-      # with complete OIDC you may omit MIPMI_UI_PASS — adjust the ?set above):
-      # MIPMI_OIDC_ISSUER: "https://idp.example/realms/ops"
-      # MIPMI_OIDC_CLIENT_ID: "mipmi"
-      # MIPMI_OIDC_CLIENT_SECRET: "${MIPMI_OIDC_CLIENT_SECRET}"
-      # MIPMI_OIDC_REDIRECT_URL: "https://mipmi.example/auth/oidc/callback"
+      OUTBAND_LISTEN: ":8080"
+      OUTBAND_UI_PASS: "${OUTBAND_UI_PASS:?set OUTBAND_UI_PASS}"
+      OUTBAND_DATA_DIR: /data
+      # Optional OIDC SSO (when set, OUTBAND_UI_PASS can be break-glass only;
+      # with complete OIDC you may omit OUTBAND_UI_PASS — adjust the ?set above):
+      # OUTBAND_OIDC_ISSUER: "https://idp.example/realms/ops"
+      # OUTBAND_OIDC_CLIENT_ID: "outband"
+      # OUTBAND_OIDC_CLIENT_SECRET: "${OUTBAND_OIDC_CLIENT_SECRET}"
+      # OUTBAND_OIDC_REDIRECT_URL: "https://outband.example/auth/oidc/callback"
       # Legacy single-host (still works). For multi-host JSON inventory, unset these
-      # and set MIPMI_HOSTS / MIPMI_DEFAULT_HOST instead — see below.
-      MIPMI_BMC_HOST: "${MIPMI_BMC_HOST:-192.168.9.74}"
-      MIPMI_BMC_USER: "${MIPMI_BMC_USER:-root}"
-      MIPMI_BMC_PASS: "${MIPMI_BMC_PASS:?set MIPMI_BMC_PASS}"
-      # Example multi-host inventory (Compose substitutes ${MIPMI_BMC_PASS}):
-      # MIPMI_DEFAULT_HOST: tyan
-      # MIPMI_HOSTS: |
+      # and set OUTBAND_HOSTS / OUTBAND_DEFAULT_HOST instead — see below.
+      OUTBAND_BMC_HOST: "${OUTBAND_BMC_HOST:-192.168.9.74}"
+      OUTBAND_BMC_USER: "${OUTBAND_BMC_USER:-root}"
+      OUTBAND_BMC_PASS: "${OUTBAND_BMC_PASS:?set OUTBAND_BMC_PASS}"
+      # Example multi-host inventory (Compose substitutes ${OUTBAND_BMC_PASS}):
+      # OUTBAND_DEFAULT_HOST: tyan
+      # OUTBAND_HOSTS: |
       #   [
       #     {
       #       "id": "tyan",
@@ -29,14 +29,14 @@ services:
       #       "host": "192.168.9.74",
       #       "port": 623,
       #       "user": "root",
-      #       "password": "${MIPMI_BMC_PASS}"
+      #       "password": "${OUTBAND_BMC_PASS}"
       #     }
       #   ]
     volumes:
-      - mipmi-data:/data
+      - outband-data:/data
     # Host networking can help IPMI UDP on some LAN setups:
     # network_mode: host
     restart: unless-stopped
 
 volumes:
-  mipmi-data:
+  outband-data:

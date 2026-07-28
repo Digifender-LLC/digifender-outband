@@ -1,5 +1,5 @@
 {
-  "name": "mipmi",
+  "name": "outband",
   "private": true,
   "scripts": {
     "build:css": "tailwindcss -i ./internal/ui/static/css/src.css -o ./internal/ui/static/css/app.css --minify",

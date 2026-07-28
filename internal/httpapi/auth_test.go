@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"mipmi/internal/bmc"
-	"mipmi/internal/config"
-	"mipmi/internal/hosts"
-	"mipmi/internal/telemetry"
+	"outband/internal/bmc"
+	"outband/internal/config"
+	"outband/internal/hosts"
+	"outband/internal/telemetry"
 )
 
 func testServer(t *testing.T, pass string) *Server {

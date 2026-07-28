@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+  <!-- Outband mark: outer band (OOB) + inner board -->
+  <rect x="2" y="2" width="28" height="28" rx="6" stroke="#3dba9c" stroke-width="2.5"/>
+  <rect x="9" y="9" width="14" height="14" rx="2" fill="#3dba9c" opacity="0.9"/>
+  <path d="M9 16h14" stroke="#0e1116" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -8,14 +8,14 @@ import (
 	"os"
 	"time"
 
-	"mipmi/internal/amiweb"
+	"outband/internal/amiweb"
 )
 
 func main() {
 	host := "192.168.9.74"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	args, cookie, err := amiweb.FetchLaunchArgs(ctx, host, "root", os.Getenv("MIPMI_BMC_PASS"))
+	args, cookie, err := amiweb.FetchLaunchArgs(ctx, host, "root", os.Getenv("OUTBAND_BMC_PASS"))
 	if err != nil {
 		panic(err)
 	}

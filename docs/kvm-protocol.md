@@ -2,7 +2,7 @@
 
 Target: Tyan S5512 BMC (`192.168.9.74`), AMI MegaRAC GoAhead, FW **S5512 R5.00** (2013), JViewer on TCP **7578** (cleartext).
 
-mIPMI Path 2: native IVTP client → ASPEED/ASP-2000 decode → RFB → vendored noVNC (`/kvm`, `/ws/kvm`).
+Outband Path 2: native IVTP client → ASPEED/ASP-2000 decode → RFB → vendored noVNC (`/kvm`, `/ws/kvm`).
 
 ## Live path (verified 2026-07-28)
 

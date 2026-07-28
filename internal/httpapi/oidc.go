@@ -14,13 +14,13 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"mipmi/internal/config"
+	"outband/internal/config"
 )
 
 const (
-	oidcStateCookie = "mipmi_oidc_state"
-	oidcNonceCookie = "mipmi_oidc_nonce"
-	oidcPKCECookie  = "mipmi_oidc_pkce"
+	oidcStateCookie = "outband_oidc_state"
+	oidcNonceCookie = "outband_oidc_nonce"
+	oidcPKCECookie  = "outband_oidc_pkce"
 	oidcCookieTTL   = 10 * time.Minute
 )
 

@@ -419,7 +419,7 @@
     window.addEventListener("resize", function () {
       if (chart) chart.resize();
     });
-    window.addEventListener("mipmi-theme", function () {
+    window.addEventListener("outband-theme", function () {
       applyThemeToChart();
     });
     setInterval(load, 15000);

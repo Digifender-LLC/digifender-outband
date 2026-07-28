@@ -1,5 +1,5 @@
 {
-  description = "mIPMI — Go + HTMX BMC UI over IPMI 2.0 / RMCP+";
+  description = "Outband — browser BMC for IPMI, AMT, and friends";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -21,7 +21,7 @@
       in
       {
         packages.default = buildGo {
-          pname = "mipmi";
+          pname = "outband";
           version =
             if self ? shortRev then
               "0.1.0-alpha.2-${self.shortRev}"
@@ -33,9 +33,18 @@
           # Pure-Go stack (modernc.org/sqlite); keep CGO off like the Dockerfile.
           env.CGO_ENABLED = "0";
 
-          vendorHash = "sha256-z7zOGV+kpdZTQmJNktTWjIMSjvxKshiu+Joel0SsIqA=";
+          # GOFLAGS=-mod=vendor breaks `go mod vendor` in the modules FOD (imports
+          # unresolved → incomplete vendor). Clear it for the vendor phase only.
+          # Must set env.GOFLAGS (not top-level GOFLAGS) — newer nixpkgs puts GOFLAGS in env.
+          overrideModAttrs = oldAttrs: {
+            env = (oldAttrs.env or { }) // {
+              GOFLAGS = "";
+            };
+          };
 
-          subPackages = [ "cmd/mipmi" ];
+          vendorHash = "sha256-+EQ+gE/8Vf91BSDCKnWUrcD//+0P/d/PLKIJqDDZYTM=";
+
+          subPackages = [ "cmd/outband" ];
 
           ldflags = [
             "-s"
@@ -43,10 +52,10 @@
           ];
 
           meta = with pkgs.lib; {
-            description = "BMC management UI over IPMI 2.0 / RMCP+";
-            homepage = "https://github.com/TheMinecraftGuyGuru/mipmi";
+            description = "Browser BMC UI (IPMI, AMT, …)";
+            homepage = "https://github.com/TheMinecraftGuyGuru/outband";
             license = licenses.mit;
-            mainProgram = "mipmi";
+            mainProgram = "outband";
             platforms = platforms.unix;
           };
         };

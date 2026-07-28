@@ -9,13 +9,13 @@ import (
 	"os"
 	"time"
 
-	"mipmi/internal/kvm"
-	"mipmi/internal/kvm/codec"
+	"outband/internal/kvm"
+	"outband/internal/kvm/codec"
 )
 
 func main() {
 	host := "192.168.9.74"
-	pass := os.Getenv("MIPMI_BMC_PASS")
+	pass := os.Getenv("OUTBAND_BMC_PASS")
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

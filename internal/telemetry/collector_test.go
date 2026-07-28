@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"mipmi/internal/bmc"
+	"outband/internal/bmc"
 )
 
 // countingClient records how often each Client method is invoked.

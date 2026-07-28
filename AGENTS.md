@@ -1,21 +1,25 @@
-# mIPMI — guide for humans and agents
+# Outband — guide for humans and agents
 
 Working notes for anyone (person or automated agent) changing this repository.
 
 ## What this is
 
-mIPMI is a Go + HTMX front-end for BMC management over IPMI 2.0 / RMCP+. It exposes dashboard, power, sensors, SEL, browser SOL (xterm.js), and an experimental AMI Adviser/IVTP KVM path bridged to noVNC via RFB.
+Outband is a Go + HTMX front-end for BMC management (out-of-band). It exposes dashboard, power, sensors, SEL, browser SOL (xterm.js), and an experimental AMI Adviser/IVTP KVM path bridged to noVNC via RFB.
 
-Provider internals are meant to stay vendor-agnostic (`internal/bmc` + `internal/provider`). The shipping provider today is IPMI (`internal/ipmi`). iDRAC and AMT are registered stubs only.
+Provider internals stay vendor-agnostic (`internal/bmc` + `internal/provider`). Shipping providers: IPMI (`internal/ipmi`), Intel AMT (`internal/amt`), HPE iLO Redfish (`internal/ilo`). iDRAC is a registered stub only.
+
+Formerly **mIPMI**; env prefix is `OUTBAND_*`, binary `outband`.
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| `cmd/mipmi` | Process entrypoint |
+| `cmd/outband` | Process entrypoint |
 | `internal/bmc` | `Client` interface + feature flags |
 | `internal/provider` | Provider registry / factory |
 | `internal/ipmi` | RMCP+ adapter (`github.com/bougou/go-ipmi`) |
+| `internal/amt` | Intel AMT WS-MAN adapter (HTTP Digest) |
+| `internal/ilo` | HPE iLO Redfish adapter |
 | `internal/config` | Env/flags + host inventory |
 | `internal/hosts` | Live host registry (active host selection) |
 | `internal/httpapi` | HTMX routes, auth gate, SOL + KVM WebSockets |
@@ -24,42 +28,42 @@ Provider internals are meant to stay vendor-agnostic (`internal/bmc` + `internal
 | `internal/amiweb` | AMI MegaRAC web login / JNLP launch args |
 | `internal/kvm` | IVTP session, video decode, HID uplink, RFB bridge |
 | `internal/rfb` | Minimal RFB server for noVNC |
-| `docs/` | BMC recon and KVM protocol notes |
+| `docs/` | BMC recon, AMT, KVM protocol, provider guide |
 | `scripts/` | Ad-hoc verify/probe tools (`//go:build ignore`) |
 | `flake.nix` / `flake.lock` | Nix flake (`buildGoModule`, Go 1.25) |
 
 ## Run and test
 
-Requirements: Go 1.25+, reachable BMC on UDP 623 (and TCP 7578 for KVM on AMI Adviser).
+Requirements: Go 1.25+, reachable BMC (UDP 623 for IPMI; TCP 7578 for AMI KVM; TCP 16992 for AMT).
 
 ```bash
-export MIPMI_BMC_HOST=192.168.9.74
-export MIPMI_BMC_USER=root
-export MIPMI_BMC_PASS='...'   # BMC password — never commit
-export MIPMI_UI_PASS='...'    # UI gate password / break-glass (or OIDC; see README) — never commit
-export MIPMI_LISTEN=:8080
+export OUTBAND_BMC_HOST=192.168.9.74
+export OUTBAND_BMC_USER=root
+export OUTBAND_BMC_PASS='...'   # BMC password — never commit
+export OUTBAND_UI_PASS='...'    # UI gate password / break-glass (or OIDC; see README) — never commit
+export OUTBAND_LISTEN=:8080
 
-go run ./cmd/mipmi
+go run ./cmd/outband
 go test ./...
 ```
 
-Docker: see `README.md` and `docker-compose.yml`. Prefer `MIPMI_HOSTS` JSON inventory when running under Compose.
+Docker: see `README.md` and `docker-compose.yml`. Prefer `OUTBAND_HOSTS` JSON inventory when running under Compose.
 
 Nix: `nix build` / `nix run` / `nix develop` via the repo flake (`nodejs` is in the dev shell for CSS). Update `vendorHash` in `flake.nix` when Go module deps change.
 
 UI CSS is Tailwind v4. After editing `internal/ui/static/css/src.css`, run `npm run build:css` and commit the generated `app.css` (Go/Docker builds embed that file and do not run Node).
 
-Verification helpers under `scripts/` are not part of the main module build (`//go:build ignore`). Run them with `go run scripts/verify_bmc.go` (etc.). They read credentials from the environment.
+Verification helpers under `scripts/` are not part of the main module build (`//go:build ignore`). Run them with `go run scripts/verify_bmc.go` (etc.). They read credentials from the environment (`OUTBAND_*`).
 
 ## Conventions
 
-- **Secrets stay out of git.** No BMC passwords, UI passwords, OIDC client secrets, WireGuard private keys, or session tokens in source, docs checked in as examples, or commit messages. Use env vars (`MIPMI_*`) or a local ignored file.
-- **BMC credentials are server-side only.** The browser authenticates with `MIPMI_UI_PASS` and/or OIDC — never with BMC credentials.
+- **Secrets stay out of git.** No BMC passwords, UI passwords, OIDC client secrets, WireGuard private keys, or session tokens in source, docs checked in as examples, or commit messages. Use env vars (`OUTBAND_*`) or a local ignored file.
+- **BMC credentials are server-side only.** The browser authenticates with `OUTBAND_UI_PASS` and/or OIDC — never with BMC credentials.
 - **Match existing style.** Prefer small, focused packages; keep HTMX partials boring and readable; avoid drive-by refactors unrelated to the task.
 - **Providers behind `bmc.Client`.** New vendor support goes through the registry — do not special-case iDRAC/AMT/IPMI in the HTTP layer.
-- **Unimplemented inventory hosts are skipped.** Stub providers (`idrac`/`amt`) return `provider.ErrNotImplemented`; `hosts.Open` warns and continues. Unknown providers and a stub `MIPMI_DEFAULT_HOST` still fail startup. At least one usable host is required.
+- **Unimplemented inventory hosts are skipped.** Stub providers return `provider.ErrNotImplemented`; `hosts.Open` warns and continues. Unknown providers and a stub `OUTBAND_DEFAULT_HOST` still fail startup. At least one usable host is required.
 - **Capabilities drive UI and polling.** Implement `bmc.Capabilities` and omit unsupported bits (`FeatureConsole`, etc.). HTTP nav/routes and the telemetry collector consult `bmc.ClientFeatures`; missing features are hidden / skipped (501 if hit directly). IPMI advertises the control plane only; **`FeatureKVM` comes from inventory `kvm` config** on the active host. SOL is via optional `bmc.Console` (advertised with `FeatureConsole`), not part of `bmc.Client`.
-- **Provider-specific inventory options** nest under `ipmi` / `kvm` on each host. Do not put vendor knobs on the shared top-level host fields.
+- **Provider-specific inventory options** nest under `ipmi` / `kvm` / `amt` on each host. Do not put vendor knobs on the shared top-level host fields.
 - **Host-keyed telemetry.** Store and collector keys are host IDs; the UI still binds one active host for now.
 - **One SOL session / one KVM session** per process (or per active host adapter). Second clients should get a clear busy/conflict response.
 - **Tests.** Prefer table-driven unit tests next to the package (`*_test.go`). Do not require a live BMC for `go test ./...`.
@@ -82,6 +86,6 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 ## Out of scope (for now)
 
 - Multi-BMC fleet UI (inventory exists; UI is still single active host)
-- Real iDRAC / Intel AMT providers (stubs only)
+- Real iDRAC / iLO providers (stubs / planned only)
 - In-process HTTPS termination (reverse proxy or LAN trust)
 - Committing private network or credential material

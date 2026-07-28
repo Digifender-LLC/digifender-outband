@@ -19,7 +19,7 @@ import (
 
 func main() {
 	host := "192.168.9.74"
-	pass := os.Getenv("MIPMI_BMC_PASS")
+	pass := os.Getenv("OUTBAND_BMC_PASS")
 	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	hc := &http.Client{Timeout: 20 * time.Second, Transport: tr}
 

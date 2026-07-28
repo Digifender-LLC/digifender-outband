@@ -1,36 +1,65 @@
-# mIPMI
+# Outband
 
-Go + HTMX BMC UI for IPMI 2.0 / RMCP+ (provider-agnostic internals). Dashboard, power, sensors, SEL, browser **SOL** (xterm.js), and experimental AMI Adviser/IVTP **KVM** bridged to noVNC.
+**Browser BMC for every vendor.**
 
-See [docs/bmc-recon.md](docs/bmc-recon.md) for the development BMC notes, [docs/kvm-protocol.md](docs/kvm-protocol.md) for the AMI KVM wire format, and [AGENTS.md](AGENTS.md) for contributor guidance.
+Outband is a Go + HTMX control plane for out-of-band server management. Power, sensors, SEL, serial console, and KVM — without Java applets, vendor portals, or BMC passwords in the browser.
 
-## Requirements
+IPMI today. AMT shipping. iDRAC / iLO next. One UI, provider-agnostic internals.
 
-- Go 1.25+
-- Node.js 22+ (only when changing UI CSS — Tailwind build)
-- Reachable BMC on UDP 623 (WireGuard or LAN); TCP 7578 for AMI KVM
-- Env credentials (never commit passwords)
+[Quick start](#quick-start) · [Features](#features) · [Providers](#providers) · [Deploy](#deploy) · [Docs](#docs)
 
-## Run locally
+---
 
-### Legacy single-host (still supported)
+## Quick start
 
 ```bash
-export MIPMI_BMC_HOST=192.168.9.74
-export MIPMI_BMC_USER=root
-export MIPMI_BMC_PASS='...'      # BMC password
-export MIPMI_UI_PASS='...'       # UI gate password (not the BMC password)
-export MIPMI_LISTEN=:8080
+export OUTBAND_BMC_HOST=192.168.9.74
+export OUTBAND_BMC_USER=root
+export OUTBAND_BMC_PASS='...'      # BMC password — never commit
+export OUTBAND_UI_PASS='...'       # UI gate password — not the BMC password
+export OUTBAND_LISTEN=:8080
 
-go run ./cmd/mipmi
+go run ./cmd/outband
 ```
 
-### Multi-host inventory via env (Compose-friendly)
+Open http://127.0.0.1:8080 and sign in with `OUTBAND_UI_PASS`.
+
+**Requirements:** Go 1.25+, a reachable BMC (IPMI UDP 623, and/or AMT TCP 16992; AMI KVM TCP 7578 when used).
+
+---
+
+## Features
+
+| | |
+|---|---|
+| **Dashboard** | Identity, power state, recent health at a glance |
+| **Power** | On / off / cycle / soft — confirmed actions |
+| **Sensors** | Live SDR readings with optional display-name maps |
+| **Metrics** | Host-keyed SQLite history, charts in the browser |
+| **SEL** | System event log without a vendor applet |
+| **Console** | Browser SOL via xterm.js (one session per process) |
+| **KVM** | Experimental AMI Adviser/IVTP → noVNC (RFB bridge) |
+| **Auth** | Local UI password and/or OIDC SSO; BMC creds stay server-side |
+
+---
+
+## Providers
+
+| Provider | Status |
+|----------|--------|
+| `ipmi` | Shipping — IPMI 2.0 / RMCP+ |
+| `amt` | Shipping — Intel AMT WS-MAN (HTTP Digest) |
+| `ilo` | Shipping — HPE iLO Redfish |
+| `idrac` | Stub — registered, not implemented |
+
+Inventory can list multiple hosts; the UI binds one **active** host for now. Unimplemented providers are skipped at startup with a warning. See [docs/providers.md](docs/providers.md) to add a backend.
+
+### Multi-host inventory
 
 ```bash
-export MIPMI_UI_PASS='...'
-export MIPMI_DEFAULT_HOST=tyan
-export MIPMI_HOSTS='[
+export OUTBAND_UI_PASS='...'
+export OUTBAND_DEFAULT_HOST=tyan
+export OUTBAND_HOSTS='[
   {
     "id": "tyan",
     "name": "Tyan BMC",
@@ -38,136 +67,136 @@ export MIPMI_HOSTS='[
     "host": "192.168.9.74",
     "port": 623,
     "user": "root",
-    "password": "'"$MIPMI_BMC_PASS"'",
+    "password": "'"$OUTBAND_BMC_PASS"'",
     "ipmi": { "cipher_suite": 3 },
     "kvm": { "port": 7578, "tls": false }
   }
 ]'
 
-go run ./cmd/mipmi
+go run ./cmd/outband
 ```
 
-Inventory priority: `MIPMI_HOSTS` (JSON) → `MIPMI_HOSTS_FILE` (YAML/JSON path) → legacy `MIPMI_BMC_*`.
+Priority: `OUTBAND_HOSTS` (JSON) → `OUTBAND_HOSTS_FILE` (YAML/JSON) → legacy `OUTBAND_BMC_*`.
 
-The UI still binds to one **active** host (`MIPMI_DEFAULT_HOST`, or the first inventory entry). Fleet UI is not implemented yet; internals and telemetry are host-keyed for a later multi-host UI.
+Provider options nest under `ipmi` / `kvm` / `amt`. IPMI hosts without a `kvm` block still enable AMI KVM by default (port 7578). Optional per-host `sensor_names` maps SDR names to UI labels (see [`hosts.example.yaml`](hosts.example.yaml)). Capabilities on the active client drive nav and telemetry.
 
-Providers: `ipmi` (implemented); `idrac` / `amt` are registered stubs (not implemented). Unimplemented inventory entries are skipped at startup with a warning; the process fails if no usable hosts remain or if `MIPMI_DEFAULT_HOST` points at a stub. The active default must be an implemented provider.
+---
 
-Provider-specific options nest under `ipmi` (e.g. `cipher_suite`) and `kvm` (e.g. `port`, `tls`). IPMI hosts without a `kvm` block still get KVM enabled by default (port 7578); other providers need an explicit `kvm` block. KVM nav/bridge follow host `kvm` config, not the IPMI adapter feature set.
+## Deploy
 
-UI nav and telemetry follow `bmc.Capabilities` on the active host’s client. The IPMI provider advertises the control plane (power/sensors/SEL/console/identity). Providers must omit unsupported features rather than advertising them and failing at runtime.
+### Docker Compose
 
-Open http://127.0.0.1:8080 and log in with `MIPMI_UI_PASS` (and/or OIDC SSO when configured).
+```bash
+export OUTBAND_BMC_PASS='...'
+export OUTBAND_UI_PASS='...'
+export OUTBAND_BMC_HOST=192.168.9.74
+docker compose up --build
+```
 
-Optional:
+If UDP/IPMI is flaky through userland Docker networking, try `network_mode: host`. For JSON inventory, set `OUTBAND_HOSTS` / `OUTBAND_DEFAULT_HOST` instead of legacy `OUTBAND_BMC_*` — see `docker-compose.yml`.
 
-- `MIPMI_BMC_PORT` (default `623`) — legacy path only
-- `MIPMI_CIPHER_SUITE` (default library choice) — legacy path; inventory uses nested `ipmi.cipher_suite`
-- `MIPMI_HOSTS_FILE` — path to a YAML or JSON hosts file
-- `MIPMI_KVM_PORT` / `MIPMI_KVM_TLS` — legacy path; inventory uses nested `kvm.port` / `kvm.tls`
+### Prebuilt image (GHCR)
 
-### UI auth (password and/or OIDC)
+```bash
+docker pull ghcr.io/theminecraftguyguru/outband:alpha
+# or a release tag:
+docker pull ghcr.io/theminecraftguyguru/outband:v0.1.0-alpha.1
+```
+
+### Nix
+
+```bash
+nix build && ./result/bin/outband
+nix run . --                  # needs OUTBAND_* env
+nix run github:TheMinecraftGuyGuru/outband/v0.1.0-alpha.2
+```
+
+Dev shell: `nix develop` (Go 1.25 + Node for CSS). Refresh `vendorHash` in `flake.nix` when Go deps change.
+
+---
+
+## Auth
 
 At least one of a local UI password or complete OIDC config is required:
 
 | Env | Role |
 |-----|------|
-| `MIPMI_UI_PASS` | Shared local / break-glass password |
-| `MIPMI_OIDC_ISSUER` | IdP issuer URL (OIDC discovery) |
-| `MIPMI_OIDC_CLIENT_ID` | OIDC client ID |
-| `MIPMI_OIDC_CLIENT_SECRET` | Client secret (optional for public PKCE clients) |
-| `MIPMI_OIDC_REDIRECT_URL` | Exact callback URL, e.g. `https://mipmi.example/auth/oidc/callback` |
+| `OUTBAND_UI_PASS` | Shared local / break-glass password |
+| `OUTBAND_OIDC_ISSUER` | IdP issuer URL |
+| `OUTBAND_OIDC_CLIENT_ID` | OIDC client ID |
+| `OUTBAND_OIDC_CLIENT_SECRET` | Optional for public PKCE clients |
+| `OUTBAND_OIDC_REDIRECT_URL` | Exact callback, e.g. `https://outband.example/auth/oidc/callback` |
 
-OIDC is enabled when issuer, client ID, and redirect URL are all set. Register that redirect URL on the IdP. The login page shows **Sign in with SSO**; when `MIPMI_UI_PASS` is also set it remains available as break-glass. Session cookie is still `mipmi_session` (12h). BMC credentials never reach the browser.
+Session cookie: `outband_session` (12h). BMC credentials never reach the browser.
 
-## Docker
+### Other useful env
 
-```bash
-export MIPMI_BMC_PASS='...'
-export MIPMI_UI_PASS='...'
-export MIPMI_BMC_HOST=192.168.9.74
-docker compose up --build
-```
+| Env | Notes |
+|-----|--------|
+| `OUTBAND_LISTEN` | Default `:8080` |
+| `OUTBAND_DATA_DIR` | SQLite telemetry dir (default `./data`) |
+| `OUTBAND_HOSTS_FILE` | Path to hosts YAML/JSON |
+| `OUTBAND_BMC_PORT` / `OUTBAND_CIPHER_SUITE` | Legacy single-host only |
+| `OUTBAND_KVM_PORT` / `OUTBAND_KVM_TLS` | Legacy path; inventory uses `kvm.*` |
 
-On a LAN host next to the BMC, point `MIPMI_BMC_HOST` at the BMC LAN IP. If UDP/IPMI is flaky through userland Docker networking, try `network_mode: host` in compose.
+---
 
-To use JSON inventory in Compose, set `MIPMI_HOSTS` (and optionally `MIPMI_DEFAULT_HOST`) instead of the legacy `MIPMI_BMC_*` vars — see comments in `docker-compose.yml`.
+## Docs
 
-### Prebuilt image (GHCR)
+| Doc | Topic |
+|-----|--------|
+| [AGENTS.md](AGENTS.md) | Contributor / agent guide |
+| [docs/bmc-recon.md](docs/bmc-recon.md) | Reference BMC notes |
+| [docs/amt.md](docs/amt.md) | Intel AMT |
+| [docs/kvm-protocol.md](docs/kvm-protocol.md) | AMI IVTP / Adviser wire format |
+| [docs/providers.md](docs/providers.md) | Writing a host provider |
 
-Alpha images are published to GitHub Container Registry on version tags:
+### UI CSS
 
-```bash
-docker pull ghcr.io/theminecraftguyguru/mipmi:alpha
-# or a specific release:
-docker pull ghcr.io/theminecraftguyguru/mipmi:v0.1.0-alpha.1
-```
-
-If the package is still private (GHCR default until flipped once in the UI), authenticate first:
-
-```bash
-echo "$GITHUB_TOKEN" | docker login ghcr.io -u USERNAME --password-stdin
-```
-
-Then open [Package settings](https://github.com/users/TheMinecraftGuyGuru/packages/container/mipmi/settings) → **Change visibility** → **Public** (matches this public repo). Package page: [ghcr.io/theminecraftguyguru/mipmi](https://github.com/TheMinecraftGuyGuru/mipmi/pkgs/container/mipmi).
-
-Run with the same env vars as Compose (`MIPMI_UI_PASS`, BMC credentials or `MIPMI_HOSTS`, etc.).
-
-## Nix
-
-Flake builds the same pure-Go binary (`CGO_ENABLED=0`, Go 1.25+). No app changes required.
-
-```bash
-# from a checkout
-nix build
-./result/bin/mipmi
-
-# or run without installing
-nix run . --   # still needs MIPMI_* env
-
-# from GitHub (tag or branch)
-nix run github:TheMinecraftGuyGuru/mipmi/v0.1.0-alpha.2
-```
-
-Dev shell: `nix develop` (Go 1.25 + Node for CSS). When `go.mod` / `go.sum` change, refresh `vendorHash` in `flake.nix` (the next `nix build` prints the expected hash on mismatch).
-
-## UI CSS (Tailwind)
-
-Styles are Tailwind v4. Edit [`internal/ui/static/css/src.css`](internal/ui/static/css/src.css), then rebuild the committed output CSS (so `go build` / Docker / Nix do not need Node):
+Tailwind v4. Edit `internal/ui/static/css/src.css`, then:
 
 ```bash
 npm install
-npm run build:css          # writes internal/ui/static/css/app.css
-npm run watch:css          # optional while iterating
+npm run build:css    # writes app.css (committed; Go/Docker/Nix do not run Node)
 ```
 
-Theme tokens and light/dark (`data-theme`) live in `src.css`. Prefer Tailwind utilities / `@apply` components there — do not hand-edit `app.css`.
+---
 
 ## Layout
 
-- `cmd/mipmi` — process entrypoint
-- `internal/bmc` — `Client` interface + capabilities
-- `internal/provider` — provider registry/factory (`ipmi`, stub `idrac`/`amt`)
-- `internal/hosts` — host registry
-- `internal/ipmi` — RMCP+ adapter (`github.com/bougou/go-ipmi`)
-- `internal/config` — process + host inventory
-- `internal/httpapi` — HTMX routes + WebSocket SOL/KVM bridges
-- `internal/telemetry` — host-keyed SQLite store + collector
-- `internal/amiweb` / `internal/kvm` / `internal/rfb` — AMI web login, IVTP KVM, RFB for noVNC
-- `internal/ui` — HTMX templates + Tailwind CSS + vendored HTMX/xterm/noVNC
-- `AGENTS.md` — guide for humans and agents working in this tree
+| Path | Role |
+|------|------|
+| `cmd/outband` | Process entrypoint |
+| `internal/bmc` | `Client` + capabilities |
+| `internal/provider` | Registry / factory |
+| `internal/ipmi` | RMCP+ adapter |
+| `internal/amt` | AMT WS-MAN adapter |
+| `internal/ilo` | HPE iLO Redfish adapter |
+| `internal/config` | Env, flags, inventory |
+| `internal/hosts` | Live host registry |
+| `internal/httpapi` | HTMX + SOL/KVM WebSockets |
+| `internal/telemetry` | Host-keyed SQLite + poller |
+| `internal/amiweb` / `kvm` / `rfb` | AMI login, IVTP, RFB |
+| `internal/ui` | Templates + static assets |
 
-## Security notes
+---
 
-- BMC username/password stay **server-side** only.
-- The browser authenticates to the UI via `MIPMI_UI_PASS` and/or OIDC SSO — never with BMC credentials.
-- No HTTPS in-app for v1 — put a reverse proxy in front or trust the LAN.
-- One SOL session per active host adapter; a second client is rejected until the first disconnects.
+## Security
 
-## WireGuard
+- BMC username/password stay **server-side**.
+- The browser authenticates with `OUTBAND_UI_PASS` and/or OIDC — never with BMC credentials.
+- No in-app HTTPS yet — reverse proxy or LAN trust.
+- One SOL session and one KVM session per process; second clients get a clear busy response.
+- Do not commit `wireguard-export.zip`, keys, or `data/*.db*`.
 
-Do not commit `wireguard-export.zip` or private keys. Keep tunnel config outside the repo.
+---
+
+## Migrating from mIPMI
+
+This project was formerly **mIPMI**. Rename env vars `MIPMI_*` → `OUTBAND_*`, binary `mipmi` → `outband`, and session cookie `mipmi_session` → `outband_session`. Inventory JSON shape is unchanged.
+
+---
 
 ## License
 
-mIPMI is MIT-licensed — see [LICENSE](LICENSE). Third-party notices (including MIT-derived KVM/IVTP ideas from [rd450x-console](https://github.com/BadCoder1337/rd450x-console) and vendored noVNC) are in [NOTICE](NOTICE).
+Outband is MIT-licensed — see [LICENSE](LICENSE). Third-party notices (including MIT-derived KVM/IVTP ideas from [rd450x-console](https://github.com/BadCoder1337/rd450x-console) and vendored noVNC) are in [NOTICE](NOTICE).

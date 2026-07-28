@@ -91,10 +91,13 @@
   }
 
   .sidebar-brand {
-    @apply px-2.5 pb-4 pt-1.5 font-mono text-lg font-semibold tracking-wide text-fg no-underline;
+    @apply flex items-center gap-2 px-2.5 pb-4 pt-1.5 font-mono text-lg font-semibold tracking-wide text-fg no-underline;
   }
   .sidebar-brand:hover {
     @apply text-accent no-underline;
+  }
+  .brand-mark {
+    @apply inline-block shrink-0;
   }
 
   .sidebar-nav {
@@ -345,7 +348,10 @@
     @apply mt-10 w-full;
   }
   .hero-brand {
-    @apply mb-3 font-mono text-4xl font-semibold tracking-wide;
+    @apply mb-2 flex items-center gap-3 font-mono text-4xl font-semibold tracking-wide;
+  }
+  .tagline {
+    @apply mb-4 font-mono text-sm tracking-wide text-accent;
   }
   .login-form label {
     @apply mb-4 grid gap-1.5 text-sm text-muted;

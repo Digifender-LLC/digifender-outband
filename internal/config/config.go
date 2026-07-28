@@ -1,4 +1,4 @@
-// Package config loads mIPMI runtime settings from flags and environment.
+// Package config loads Outband runtime settings from flags and environment.
 package config
 
 import (
@@ -24,6 +24,19 @@ type KVMOptions struct {
 	TLS  bool `json:"tls,omitempty" yaml:"tls,omitempty"`
 }
 
+// AMTOptions holds Intel AMT WS-MAN settings.
+type AMTOptions struct {
+	// TLS selects HTTPS on port 16993 when the host port is 0; otherwise only
+	// flips the scheme (explicit Port still wins).
+	TLS bool `json:"tls,omitempty" yaml:"tls,omitempty"`
+}
+
+// ILOOptions holds HPE iLO Redfish settings.
+type ILOOptions struct {
+	// InsecureSkipVerify defaults true when nil (iLO self-signed certs are common).
+	InsecureSkipVerify *bool `json:"insecure_skip_verify,omitempty" yaml:"insecure_skip_verify,omitempty"`
+}
+
 // HostConfig describes one BMC/host entry in the inventory.
 type HostConfig struct {
 	ID       string `json:"id" yaml:"id"`
@@ -34,8 +47,64 @@ type HostConfig struct {
 	User     string `json:"user" yaml:"user"`
 	Password string `json:"password" yaml:"password"`
 
+	// SensorNames maps BMC/SDR sensor names to human-readable UI labels.
+	// Keys must match the provider's sensor Name exactly; unmatched sensors keep their SDR name.
+	SensorNames map[string]string `json:"sensor_names,omitempty" yaml:"sensor_names,omitempty"`
+
 	IPMI *IPMIOptions `json:"ipmi,omitempty" yaml:"ipmi,omitempty"`
 	KVM  *KVMOptions  `json:"kvm,omitempty" yaml:"kvm,omitempty"`
+	AMT  *AMTOptions  `json:"amt,omitempty" yaml:"amt,omitempty"`
+	ILO  *ILOOptions  `json:"ilo,omitempty" yaml:"ilo,omitempty"`
+
+	// Options holds opaque JSON blobs keyed by provider name for experimental
+	// or in-tree backends that do not yet have a typed nest (unlike ipmi/kvm).
+	// Prefer typed fields for shipping providers; when both exist, typed wins.
+	Options OptionMap `json:"options,omitempty" yaml:"options,omitempty"`
+}
+
+// OptionMap is opaque per-provider JSON keyed by provider name.
+type OptionMap map[string]json.RawMessage
+
+// UnmarshalYAML accepts nested YAML objects or JSON object/array strings per key.
+func (m *OptionMap) UnmarshalYAML(value *yaml.Node) error {
+	var raw map[string]yaml.Node
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	out := make(OptionMap, len(raw))
+	for k, node := range raw {
+		var v any
+		if err := node.Decode(&v); err != nil {
+			return fmt.Errorf("options.%s: %w", k, err)
+		}
+		if s, ok := v.(string); ok {
+			s = strings.TrimSpace(s)
+			if len(s) > 0 && (s[0] == '{' || s[0] == '[') {
+				if !json.Valid([]byte(s)) {
+					return fmt.Errorf("options.%s: invalid JSON string", k)
+				}
+				out[k] = json.RawMessage(s)
+				continue
+			}
+		}
+		b, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("options.%s: %w", k, err)
+		}
+		out[k] = b
+	}
+	*m = out
+	return nil
+}
+
+// SensorDisplayName returns the configured label for an SDR sensor name, or sdr unchanged.
+func (h HostConfig) SensorDisplayName(sdr string) string {
+	if h.SensorNames != nil {
+		if n := strings.TrimSpace(h.SensorNames[sdr]); n != "" {
+			return n
+		}
+	}
+	return sdr
 }
 
 // CipherID returns the RMCP+ cipher suite ID, or -1 for library default.
@@ -44,6 +113,20 @@ func (h HostConfig) CipherID() int {
 		return -1
 	}
 	return *h.IPMI.CipherSuite
+}
+
+// AMTTLS reports whether the AMT provider should use HTTPS WS-MAN.
+func (h HostConfig) AMTTLS() bool {
+	return h.AMT != nil && h.AMT.TLS
+}
+
+// ILOInsecureSkipVerify reports whether the iLO Redfish client should skip TLS verify.
+// Defaults to true when the ilo nest or the field is omitted (self-signed iLO certs).
+func (h HostConfig) ILOInsecureSkipVerify() bool {
+	if h.ILO == nil || h.ILO.InsecureSkipVerify == nil {
+		return true
+	}
+	return *h.ILO.InsecureSkipVerify
 }
 
 // HasKVM reports whether AMI KVM is configured for this host.
@@ -64,6 +147,19 @@ func (h HostConfig) KVMEndpoint() (port int, tls bool) {
 	return port, h.KVM.TLS
 }
 
+// ProviderOptions returns the opaque options JSON for name, if present.
+// Keys are matched case-insensitively after normalizeHosts lowercases them.
+func (h HostConfig) ProviderOptions(name string) (json.RawMessage, bool) {
+	if len(h.Options) == 0 {
+		return nil, false
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	raw, ok := h.Options[name]
+	if !ok || len(raw) == 0 {
+		return nil, false
+	}
+	return raw, true
+}
 
 // OIDCConfig holds optional OpenID Connect settings for the UI gate.
 // Enabled when Issuer, ClientID, and RedirectURL are all set. ClientSecret
@@ -192,7 +288,6 @@ func Load(args []string) (*Config, error) {
 	return cfg, nil
 }
 
-
 func validateAuth(cfg *Config) error {
 	if cfg.OIDC.anySet() && !cfg.OIDC.Enabled() {
 		return fmt.Errorf("OIDC is partially configured: set MIPMI_OIDC_ISSUER, MIPMI_OIDC_CLIENT_ID, and MIPMI_OIDC_REDIRECT_URL together (client secret is optional)")
@@ -302,6 +397,16 @@ func normalizeHosts(hosts []HostConfig) ([]HostConfig, error) {
 		if h.Port == 0 && h.Provider == "ipmi" {
 			h.Port = 623
 		}
+		if h.Port == 0 && h.Provider == "amt" {
+			if h.AMT != nil && h.AMT.TLS {
+				h.Port = 16993
+			} else {
+				h.Port = 16992
+			}
+		}
+		if h.Port == 0 && h.Provider == "ilo" {
+			h.Port = 443
+		}
 		if h.ID == "" {
 			h.ID = sanitizeID(h.Host)
 		}
@@ -312,6 +417,31 @@ func normalizeHosts(hosts []HostConfig) ([]HostConfig, error) {
 		// Preserve AMI-via-IPMI default: enable KVM unless explicitly omitted for non-ipmi.
 		if h.Provider == "ipmi" && h.KVM == nil {
 			h.KVM = &KVMOptions{Port: 7578}
+		}
+
+		if len(h.SensorNames) > 0 {
+			cp := make(map[string]string, len(h.SensorNames))
+			for k, v := range h.SensorNames {
+				k = strings.TrimSpace(k)
+				v = strings.TrimSpace(v)
+				if k == "" || v == "" {
+					continue
+				}
+				cp[k] = v
+			}
+			h.SensorNames = cp
+		}
+
+		if len(h.Options) > 0 {
+			cp := make(OptionMap, len(h.Options))
+			for k, v := range h.Options {
+				k = strings.ToLower(strings.TrimSpace(k))
+				if k == "" || len(v) == 0 {
+					continue
+				}
+				cp[k] = v
+			}
+			h.Options = cp
 		}
 
 		out[i] = h

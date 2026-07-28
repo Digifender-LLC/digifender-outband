@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"testing"
 
-	"mipmi/internal/bmc"
-	"mipmi/internal/config"
-	"mipmi/internal/provider"
+	"outband/internal/bmc"
+	"outband/internal/config"
+	"outband/internal/provider"
 )
 
 func init() {
@@ -51,7 +51,7 @@ func TestOpenSkipsUnimplemented(t *testing.T) {
 func TestOpenAllUnimplemented(t *testing.T) {
 	cfgs := []config.HostConfig{
 		{ID: "a", Provider: "idrac", Host: "10.0.0.1", Password: "x"},
-		{ID: "b", Provider: "amt", Host: "10.0.0.2", Password: "x"},
+		{ID: "b", Provider: "idrac", Host: "10.0.0.2", Password: "x"},
 	}
 	_, err := Open(cfgs, "", discardLog())
 	if err == nil {
@@ -67,6 +67,32 @@ func TestOpenDefaultSkipped(t *testing.T) {
 	_, err := Open(cfgs, "dell", discardLog())
 	if err == nil {
 		t.Fatal("expected error when default is unimplemented")
+	}
+}
+
+func TestRenameSensor(t *testing.T) {
+	cfgs := []config.HostConfig{
+		{
+			ID:       "ok",
+			Provider: "testok",
+			Host:     "10.0.0.2",
+			Password: "x",
+			SensorNames: map[string]string{
+				"CPU DTS value": "CPU temperature",
+			},
+		},
+	}
+	r, err := Open(cfgs, "ok", discardLog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	h := r.Default()
+	if got := h.RenameSensor("CPU DTS value"); got != "CPU temperature" {
+		t.Fatalf("got %q", got)
+	}
+	if got := h.RenameSensor("Other"); got != "Other" {
+		t.Fatalf("passthrough %q", got)
 	}
 }
 

@@ -4,12 +4,14 @@
 wireguard-export.zip
 **/wg*.conf
 bin/
-/mipmi
+/outband
 dist/
 data/
 *.db
 *.db-*
+hosts.yaml
 .cursor/
 result
 result-*
 node_modules/
+hosts.yaml

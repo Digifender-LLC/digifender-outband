@@ -15,12 +15,12 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"mipmi/internal/bmc"
-	"mipmi/internal/config"
-	"mipmi/internal/hosts"
-	"mipmi/internal/kvm"
-	"mipmi/internal/telemetry"
-	"mipmi/internal/ui"
+	"outband/internal/bmc"
+	"outband/internal/config"
+	"outband/internal/hosts"
+	"outband/internal/kvm"
+	"outband/internal/telemetry"
+	"outband/internal/ui"
 )
 
 // Server is the HTMX HTTP front-end.
@@ -649,7 +649,7 @@ func (s *Server) handleSOLWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer sess.Close()
 
-	_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n*** mIPMI SOL connected to "+s.displayHost()+" (serial, not KVM) ***\r\n"))
+	_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n*** Outband SOL connected to "+s.displayHost()+" (serial, not KVM) ***\r\n"))
 
 	errCh := make(chan error, 2)
 

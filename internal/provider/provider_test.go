@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"mipmi/internal/config"
-	"mipmi/internal/provider"
+	"outband/internal/config"
+	"outband/internal/provider"
 
-	_ "mipmi/internal/ipmi" // register ipmi
+	_ "outband/internal/amt"  // register amt
+	_ "outband/internal/ilo"  // register ilo
+	_ "outband/internal/ipmi" // register ipmi
 )
 
 func TestKnown(t *testing.T) {
@@ -18,6 +20,12 @@ func TestKnown(t *testing.T) {
 	}
 	if !provider.Known("idrac") {
 		t.Fatal("idrac should be known")
+	}
+	if !provider.Known("amt") {
+		t.Fatal("amt should be known")
+	}
+	if !provider.Known("ilo") {
+		t.Fatal("ilo should be known")
 	}
 	if provider.Known("nope") {
 		t.Fatal("nope should not be known")
@@ -51,6 +59,9 @@ func TestNames(t *testing.T) {
 	}
 	if !slices.Contains(names, "ipmi") {
 		t.Fatalf("Names=%v missing ipmi", names)
+	}
+	if !slices.Contains(names, "ilo") {
+		t.Fatalf("Names=%v missing ilo", names)
 	}
 	if !slices.IsSorted(names) {
 		t.Fatalf("Names not sorted: %v", names)

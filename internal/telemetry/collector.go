@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"mipmi/internal/bmc"
+	"outband/internal/bmc"
 )
 
 // PollIntervals controls how often each BMC query runs.
@@ -36,6 +36,8 @@ type Collector struct {
 	Intervals PollIntervals
 	Retention time.Duration
 	Log       *slog.Logger
+	// RenameSensor optionally maps SDR sensor names to display labels before storage.
+	RenameSensor func(string) string
 }
 
 // Run blocks until ctx is cancelled. It performs an immediate warm poll first.
@@ -164,6 +166,11 @@ func (c *Collector) pollSensors(ctx context.Context) {
 		c.Store.SetError(c.HostID, err.Error())
 		c.Log.Warn("poll sensors", "host", c.HostID, "err", err)
 		return
+	}
+	if c.RenameSensor != nil {
+		for i := range sensors {
+			sensors[i].Name = c.RenameSensor(sensors[i].Name)
+		}
 	}
 	if err := c.Store.RecordSensors(c.HostID, sensors); err != nil {
 		c.Log.Warn("record sensors", "host", c.HostID, "err", err)

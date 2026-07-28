@@ -1,4 +1,4 @@
-// Package bmc defines the BMC control-plane interface used by mIPMI.
+// Package bmc defines the BMC control-plane interface used by Outband.
 package bmc
 
 import (

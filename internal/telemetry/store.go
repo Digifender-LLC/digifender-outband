@@ -13,7 +13,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"mipmi/internal/bmc"
+	"outband/internal/bmc"
 )
 
 type hostSnap struct {
@@ -56,7 +56,7 @@ func Open(dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
-	path := filepath.Join(dataDir, "mipmi.db")
+	path := filepath.Join(dataDir, "outband.db")
 	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)

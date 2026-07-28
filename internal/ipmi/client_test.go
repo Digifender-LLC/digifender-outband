@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"testing"
 
-	"mipmi/internal/bmc"
+	"outband/internal/bmc"
 )
 
 func TestNewFeatures(t *testing.T) {

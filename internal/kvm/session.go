@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 
-	"mipmi/internal/amiweb"
+	"outband/internal/amiweb"
 )
 
 // WebSession is the result of logging into the BMC web UI.

@@ -4,11 +4,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Login · mIPMI</title>
+  <title>Login · Outband</title>
+  <link rel="icon" href="/static/img/outband.svg" type="image/svg+xml">
   <script>
   (function () {
     try {
-      var k = "mipmi-theme";
+      var k = "outband-theme";
       var t = localStorage.getItem(k);
       if (t !== "light" && t !== "dark") {
         t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
@@ -26,8 +27,9 @@
   <div class="login-shell">
     <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false">Theme</button>
     <main class="login-panel">
-      <p class="brand hero-brand">mIPMI</p>
-      <p class="lede">BMC control for {{.BMCHost}}. BMC credentials stay on the server.</p>
+      <p class="brand hero-brand"><img class="brand-mark" src="/static/img/outband.svg" width="36" height="36" alt="">Outband</p>
+      <p class="tagline">Out-of-band. In browser.</p>
+      <p class="lede">Managing {{.BMCHost}}. BMC credentials stay on the server.</p>
       {{if .Error}}<p class="err" role="alert">{{.Error}}</p>{{end}}
       {{if .OIDCEnabled}}
       <p><a class="btn primary" href="/auth/oidc/login">Sign in with SSO</a></p>

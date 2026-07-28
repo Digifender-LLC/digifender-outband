@@ -12,12 +12,12 @@ import (
 	"os"
 	"time"
 
-	"mipmi/internal/amiweb"
+	"outband/internal/amiweb"
 )
 
 func main() {
 	host := "192.168.9.74"
-	pass := os.Getenv("MIPMI_BMC_PASS")
+	pass := os.Getenv("OUTBAND_BMC_PASS")
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 

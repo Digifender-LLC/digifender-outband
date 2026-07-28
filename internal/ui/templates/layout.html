@@ -1,11 +1,12 @@
 {{define "head"}}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{if .Title}}{{.Title}} · {{end}}mIPMI</title>
+<title>{{if .Title}}{{.Title}} · {{end}}Outband</title>
+<link rel="icon" href="/static/img/outband.svg" type="image/svg+xml">
 <script>
 (function () {
   try {
-    var k = "mipmi-theme";
+    var k = "outband-theme";
     var t = localStorage.getItem(k);
     if (t !== "light" && t !== "dark") {
       t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
@@ -23,7 +24,7 @@
 
 {{define "sidebar"}}
 <aside class="sidebar" id="app-sidebar" aria-label="Primary">
-  <a class="sidebar-brand" href="/">mIPMI</a>
+  <a class="sidebar-brand" href="/"><img class="brand-mark" src="/static/img/outband.svg" width="22" height="22" alt="">Outband</a>
   <nav class="sidebar-nav">
     <a href="/" {{if eq .Active "dashboard"}}aria-current="page"{{end}}>Dashboard</a>
     {{if .ShowPower}}<a href="/power" {{if eq .Active "power"}}aria-current="page"{{end}}>Power</a>{{end}}

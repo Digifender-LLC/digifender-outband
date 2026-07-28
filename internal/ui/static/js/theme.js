@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "mipmi-theme";
+  var STORAGE_KEY = "outband-theme";
 
   function systemTheme() {
     try {
@@ -27,7 +27,7 @@
     } catch (e) { /* ignore */ }
     syncToggles(theme);
     try {
-      window.dispatchEvent(new CustomEvent("mipmi-theme", { detail: { theme: theme } }));
+      window.dispatchEvent(new CustomEvent("outband-theme", { detail: { theme: theme } }));
     } catch (e) { /* ignore */ }
   }
 

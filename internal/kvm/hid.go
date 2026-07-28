@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"mipmi/internal/rfb"
+	"outband/internal/rfb"
 )
 
 // HID report wire format (clean-room port of Tyan JViewer USBKeyboardRep /

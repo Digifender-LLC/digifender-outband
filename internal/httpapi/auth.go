@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	sessionCookie = "mipmi_session"
+	sessionCookie = "outband_session"
 	sessionTTL    = 12 * time.Hour
 )
 

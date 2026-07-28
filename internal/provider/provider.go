@@ -7,8 +7,8 @@ import (
 	"sort"
 	"sync"
 
-	"mipmi/internal/bmc"
-	"mipmi/internal/config"
+	"outband/internal/bmc"
+	"outband/internal/config"
 )
 
 // ErrNotImplemented is returned by stub providers that are not yet wired.

@@ -9,14 +9,16 @@ import (
 	"syscall"
 	"time"
 
-	"mipmi/internal/config"
-	"mipmi/internal/hosts"
-	"mipmi/internal/httpapi"
-	"mipmi/internal/provider"
-	"mipmi/internal/telemetry"
+	"outband/internal/config"
+	"outband/internal/hosts"
+	"outband/internal/httpapi"
+	"outband/internal/provider"
+	"outband/internal/telemetry"
 
-	// Register BMC providers (ipmi + stubs in provider).
-	_ "mipmi/internal/ipmi"
+	// Register BMC providers (ipmi, amt, ilo; idrac stub in provider).
+	_ "outband/internal/amt"
+	_ "outband/internal/ilo"
+	_ "outband/internal/ipmi"
 )
 
 func main() {
@@ -73,8 +75,9 @@ func main() {
 			SEL:     cfg.PollSEL,
 			MCInfo:  cfg.PollMCInfo,
 		},
-		Retention: time.Duration(cfg.RetentionDays) * 24 * time.Hour,
-		Log:       log,
+		Retention:    time.Duration(cfg.RetentionDays) * 24 * time.Hour,
+		Log:          log,
+		RenameSensor: active.RenameSensor,
 	}
 	go collector.Run(ctx)
 
@@ -85,7 +88,7 @@ func main() {
 	}
 
 	go func() {
-		log.Info("mIPMI listening",
+		log.Info("Outband listening",
 			"addr", cfg.Listen,
 			"host", active.ID,
 			"provider", active.Provider,

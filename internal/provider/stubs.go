@@ -3,13 +3,12 @@ package provider
 import (
 	"fmt"
 
-	"mipmi/internal/bmc"
-	"mipmi/internal/config"
+	"outband/internal/bmc"
+	"outband/internal/config"
 )
 
 func init() {
 	Register("idrac", stubFactory("idrac"))
-	Register("amt", stubFactory("amt"))
 }
 
 func stubFactory(name string) Factory {

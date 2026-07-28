@@ -1,4 +1,4 @@
-module mipmi
+module outband
 
 go 1.25.0
 

@@ -1,12 +1,13 @@
 package config_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"mipmi/internal/config"
+	"outband/internal/config"
 )
 
 func TestLoadLegacySingleHost(t *testing.T) {
@@ -135,6 +136,101 @@ func TestFlatKVMIgnored(t *testing.T) {
 	}
 }
 
+func TestAMTDefaultPort(t *testing.T) {
+	t.Setenv("MIPMI_BMC_PASS", "")
+	t.Setenv("MIPMI_UI_PASS", "uipass")
+	t.Setenv("MIPMI_DEFAULT_HOST", "a")
+	t.Setenv("MIPMI_HOSTS", `[
+		{"id":"a","provider":"amt","host":"192.168.8.45","user":"admin","password":"p"}
+	]`)
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	if h.Port != 16992 {
+		t.Fatalf("port=%d want 16992", h.Port)
+	}
+	if h.AMTTLS() {
+		t.Fatal("tls should be false")
+	}
+	if h.HasKVM() {
+		t.Fatal("amt without kvm must not HasKVM")
+	}
+}
+
+func TestAMTTLSDefaultPort(t *testing.T) {
+	t.Setenv("MIPMI_BMC_PASS", "")
+	t.Setenv("MIPMI_UI_PASS", "uipass")
+	t.Setenv("MIPMI_DEFAULT_HOST", "a")
+	t.Setenv("MIPMI_HOSTS", `[
+		{"id":"a","provider":"amt","host":"192.168.8.45","user":"admin","password":"p","amt":{"tls":true}}
+	]`)
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	if h.Port != 16993 {
+		t.Fatalf("port=%d want 16993", h.Port)
+	}
+	if !h.AMTTLS() {
+		t.Fatal("tls should be true")
+	}
+}
+
+func TestILODefaultPort(t *testing.T) {
+	t.Setenv("MIPMI_BMC_PASS", "")
+	t.Setenv("MIPMI_UI_PASS", "uipass")
+	t.Setenv("MIPMI_DEFAULT_HOST", "a")
+	t.Setenv("MIPMI_HOSTS", `[
+		{"id":"a","provider":"ilo","host":"192.168.9.90","user":"Administrator","password":"p"}
+	]`)
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	if h.Port != 443 {
+		t.Fatalf("port=%d want 443", h.Port)
+	}
+	if !h.ILOInsecureSkipVerify() {
+		t.Fatal("insecure_skip_verify should default true")
+	}
+	if h.HasKVM() {
+		t.Fatal("ilo without kvm must not HasKVM")
+	}
+}
+
+func TestILOInsecureSkipVerifyFalse(t *testing.T) {
+	t.Setenv("MIPMI_BMC_PASS", "")
+	t.Setenv("MIPMI_UI_PASS", "uipass")
+	t.Setenv("MIPMI_DEFAULT_HOST", "a")
+	t.Setenv("MIPMI_HOSTS", `[
+		{"id":"a","provider":"ilo","host":"192.168.9.90","user":"Administrator","password":"p",
+		 "ilo":{"insecure_skip_verify":false}}
+	]`)
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+	clearOIDCEnv(t)
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Hosts[0].ILOInsecureSkipVerify() {
+		t.Fatal("insecure_skip_verify should be false")
+	}
+}
+
 func TestNonIPMIWithoutKVM(t *testing.T) {
 	t.Setenv("MIPMI_BMC_PASS", "")
 	t.Setenv("MIPMI_UI_PASS", "uipass")
@@ -151,6 +247,32 @@ func TestNonIPMIWithoutKVM(t *testing.T) {
 	}
 	if cfg.Hosts[0].HasKVM() {
 		t.Fatal("non-ipmi without kvm block must not HasKVM")
+	}
+}
+
+func TestLoadSensorNames(t *testing.T) {
+	t.Setenv("MIPMI_BMC_PASS", "")
+	t.Setenv("MIPMI_UI_PASS", "uipass")
+	t.Setenv("MIPMI_DEFAULT_HOST", "a")
+	t.Setenv("MIPMI_HOSTS", `[
+		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p",
+		 "sensor_names":{"CPU DTS value":"CPU temperature","Sys.1(CPU)":"CPU fan"}}
+	]`)
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	if got := h.SensorDisplayName("CPU DTS value"); got != "CPU temperature" {
+		t.Fatalf("alias=%q", got)
+	}
+	if got := h.SensorDisplayName("Sys.1(CPU)"); got != "CPU fan" {
+		t.Fatalf("alias=%q", got)
+	}
+	if got := h.SensorDisplayName("Unknown"); got != "Unknown" {
+		t.Fatalf("passthrough=%q", got)
 	}
 }
 
@@ -175,7 +297,7 @@ func TestLoadMissingUser(t *testing.T) {
 func TestValidateProviders(t *testing.T) {
 	known := func(name string) bool {
 		switch name {
-		case "ipmi", "idrac", "amt":
+		case "ipmi", "idrac", "amt", "ilo":
 			return true
 		default:
 			return false
@@ -239,12 +361,11 @@ func clearOIDCEnv(t *testing.T) {
 }
 
 func TestAuthRequiresPasswordOrOIDC(t *testing.T) {
-	t.Setenv("MIPMI_HOSTS", "")
+	t.Setenv("MIPMI_HOSTS", `[{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p"}]`)
 	t.Setenv("MIPMI_HOSTS_FILE", "")
-	t.Setenv("MIPMI_BMC_HOST", "10.0.0.1")
-	t.Setenv("MIPMI_BMC_USER", "admin")
-	t.Setenv("MIPMI_BMC_PASS", "secret")
+	t.Setenv("MIPMI_BMC_PASS", "")
 	t.Setenv("MIPMI_UI_PASS", "")
+	t.Setenv("MIPMI_DEFAULT_HOST", "a")
 	clearOIDCEnv(t)
 
 	_, err := config.Load(nil)
@@ -257,12 +378,11 @@ func TestAuthRequiresPasswordOrOIDC(t *testing.T) {
 }
 
 func TestAuthPartialOIDCFails(t *testing.T) {
-	t.Setenv("MIPMI_HOSTS", "")
+	t.Setenv("MIPMI_HOSTS", `[{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p"}]`)
 	t.Setenv("MIPMI_HOSTS_FILE", "")
-	t.Setenv("MIPMI_BMC_HOST", "10.0.0.1")
-	t.Setenv("MIPMI_BMC_USER", "admin")
-	t.Setenv("MIPMI_BMC_PASS", "secret")
-	t.Setenv("MIPMI_UI_PASS", "")
+	t.Setenv("MIPMI_BMC_PASS", "")
+	t.Setenv("MIPMI_UI_PASS", "uipass")
+	t.Setenv("MIPMI_DEFAULT_HOST", "a")
 	t.Setenv("MIPMI_OIDC_ISSUER", "https://idp.example")
 	t.Setenv("MIPMI_OIDC_CLIENT_ID", "")
 	t.Setenv("MIPMI_OIDC_CLIENT_SECRET", "")
@@ -278,12 +398,11 @@ func TestAuthPartialOIDCFails(t *testing.T) {
 }
 
 func TestAuthOIDCWithoutPassword(t *testing.T) {
-	t.Setenv("MIPMI_HOSTS", "")
+	t.Setenv("MIPMI_HOSTS", `[{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p"}]`)
 	t.Setenv("MIPMI_HOSTS_FILE", "")
-	t.Setenv("MIPMI_BMC_HOST", "10.0.0.1")
-	t.Setenv("MIPMI_BMC_USER", "admin")
-	t.Setenv("MIPMI_BMC_PASS", "secret")
+	t.Setenv("MIPMI_BMC_PASS", "")
 	t.Setenv("MIPMI_UI_PASS", "")
+	t.Setenv("MIPMI_DEFAULT_HOST", "a")
 	t.Setenv("MIPMI_OIDC_ISSUER", "https://idp.example")
 	t.Setenv("MIPMI_OIDC_CLIENT_ID", "mipmi")
 	t.Setenv("MIPMI_OIDC_CLIENT_SECRET", "secret")
@@ -308,10 +427,132 @@ func TestOIDCConfigEnabled(t *testing.T) {
 	}
 	on := config.OIDCConfig{
 		Issuer:      "https://idp.example",
-		ClientID:    "mipmi",
-		RedirectURL: "https://mipmi.example/auth/oidc/callback",
+		ClientID:    "c",
+		RedirectURL: "https://app/callback",
 	}
 	if !on.Enabled() {
-		t.Fatal("complete OIDC should be enabled")
+		t.Fatal("complete config should be enabled")
+	}
+}
+
+func TestLoadOptionsJSON(t *testing.T) {
+	t.Setenv("MIPMI_BMC_PASS", "")
+	t.Setenv("MIPMI_UI_PASS", "uipass")
+	t.Setenv("MIPMI_DEFAULT_HOST", "d")
+	t.Setenv("MIPMI_HOSTS", `[
+		{"id":"d","provider":"idrac","host":"1.1.1.1","user":"u","password":"p",
+		 "options":{"DigitalOcean":{"region":"nyc3","droplet_id":123}}}
+	]`)
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	raw, ok := h.ProviderOptions("digitalocean")
+	if !ok {
+		t.Fatal("expected ProviderOptions for digitalocean")
+	}
+	var got struct {
+		Region    string `json:"region"`
+		DropletID int    `json:"droplet_id"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Region != "nyc3" || got.DropletID != 123 {
+		t.Fatalf("got %+v", got)
+	}
+	if _, ok := h.ProviderOptions("missing"); ok {
+		t.Fatal("expected missing options")
+	}
+	// Existing IPMI loads must still work when options is absent.
+	if h.HasKVM() {
+		t.Fatal("non-ipmi without kvm must not HasKVM")
+	}
+}
+
+func TestLoadOptionsYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hosts.yaml")
+	content := `
+- id: droplet
+  provider: idrac
+  host: api.example.com
+  user: token
+  password: secret
+  options:
+    digitalocean:
+      region: nyc3
+      droplet_id: 99
+    agent: '{"socket":"/run/agent.sock"}'
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MIPMI_HOSTS", "")
+	t.Setenv("MIPMI_HOSTS_FILE", path)
+	t.Setenv("MIPMI_UI_PASS", "uipass")
+	t.Setenv("MIPMI_DEFAULT_HOST", "droplet")
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	raw, ok := h.ProviderOptions("digitalocean")
+	if !ok {
+		t.Fatal("expected digitalocean options")
+	}
+	var do struct {
+		Region    string `json:"region"`
+		DropletID int    `json:"droplet_id"`
+	}
+	if err := json.Unmarshal(raw, &do); err != nil {
+		t.Fatal(err)
+	}
+	if do.Region != "nyc3" || do.DropletID != 99 {
+		t.Fatalf("digitalocean %+v", do)
+	}
+	agent, ok := h.ProviderOptions("agent")
+	if !ok {
+		t.Fatal("expected agent options")
+	}
+	var ag struct {
+		Socket string `json:"socket"`
+	}
+	if err := json.Unmarshal(agent, &ag); err != nil {
+		t.Fatal(err)
+	}
+	if ag.Socket != "/run/agent.sock" {
+		t.Fatalf("agent socket=%q", ag.Socket)
+	}
+}
+
+func TestIPMIUnchangedWithUnrelatedOptions(t *testing.T) {
+	t.Setenv("MIPMI_BMC_PASS", "")
+	t.Setenv("MIPMI_UI_PASS", "uipass")
+	t.Setenv("MIPMI_DEFAULT_HOST", "a")
+	t.Setenv("MIPMI_HOSTS", `[
+		{"id":"a","provider":"ipmi","host":"1.1.1.1","user":"u","password":"p",
+		 "ipmi":{"cipher_suite":3},
+		 "options":{"other":{"x":1}}}
+	]`)
+	t.Setenv("MIPMI_HOSTS_FILE", "")
+
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := cfg.Hosts[0]
+	if h.CipherID() != 3 {
+		t.Fatalf("cipher=%d", h.CipherID())
+	}
+	if !h.HasKVM() {
+		t.Fatal("ipmi should still default KVM")
+	}
+	if _, ok := h.ProviderOptions("other"); !ok {
+		t.Fatal("expected unrelated options preserved")
 	}
 }

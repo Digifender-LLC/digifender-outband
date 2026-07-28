@@ -1,0 +1,43 @@
+# Example multi-host inventory for MIPMI_HOSTS_FILE.
+# Copy to hosts.yaml (gitignored), fill in password, then:
+#   export MIPMI_HOSTS_FILE=./hosts.yaml
+#   export MIPMI_UI_PASS='...'
+#   go run ./cmd/mipmi
+#
+# sensor_names maps exact BMC/SDR names → human-readable UI / telemetry labels.
+
+- id: tyan
+  name: Tyan BMC
+  provider: ipmi
+  host: 192.168.9.74
+  port: 623
+  user: root
+  password: "CHANGE_ME"
+  ipmi:
+    cipher_suite: 3
+  kvm:
+    port: 7578
+    tls: false
+  sensor_names:
+    CPU DTS value: CPU temperature
+    CPU below tmax: CPU below Tmax
+    PCI-E Area: PCIe area temp
+    SAS Case: SAS bay temp
+    CPU MOS Area: CPU MOSFET temp
+    Ambient: Ambient temp
+    DIMMA0: DIMM A0 temp
+    DIMMA1: DIMM A1 temp
+    DIMMB0: DIMM B0 temp
+    DIMMB1: DIMM B1 temp
+    CPU Vcore: CPU Vcore
+    3.3V: 3.3V rail
+    5V: 5V rail
+    12V: 12V rail
+    VBAT: CMOS battery
+    Sys.1(CPU): CPU fan
+    Sys.2(Front 1): Front fan 1
+    Sys.3(Front 2): Front fan 2
+    Sys.4(Rear 1): Rear fan 1
+    Sys.5(Rear 2): Rear fan 2
+    PSU1 Present: PSU 1 present
+    PSU2 Present: PSU 2 present

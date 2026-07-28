@@ -14,7 +14,7 @@ import (
 
 	goipmi "github.com/bougou/go-ipmi"
 
-	"mipmi/internal/bmc"
+	"outband/internal/bmc"
 )
 
 // Config is the RMCP+ connection settings.

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"mipmi/internal/bmc"
-	"mipmi/internal/config"
-	"mipmi/internal/provider"
+	"outband/internal/bmc"
+	"outband/internal/config"
+	"outband/internal/provider"
 )
 
 // Host is a registered BMC with an open client.
@@ -22,7 +22,9 @@ type Host struct {
 	hasKVM   bool
 	kvmPort  int
 	kvmTLS   bool
-	Client   bmc.Client
+	// sensorNames maps SDR names → display labels (from inventory sensor_names).
+	sensorNames map[string]string
+	Client      bmc.Client
 }
 
 // DisplayName returns a UI label (name if set, else address).
@@ -31,6 +33,17 @@ func (h *Host) DisplayName() string {
 		return h.Name
 	}
 	return h.Address
+}
+
+// RenameSensor returns the configured display name for an SDR sensor, or name unchanged.
+func (h *Host) RenameSensor(name string) string {
+	if h == nil || h.sensorNames == nil {
+		return name
+	}
+	if n := h.sensorNames[name]; n != "" {
+		return n
+	}
+	return name
 }
 
 // HasKVM reports whether AMI KVM is configured for this host.
@@ -93,13 +106,14 @@ func Open(cfgs []config.HostConfig, defaultID string, log *slog.Logger) (*Regist
 			return nil, err
 		}
 		h := &Host{
-			ID:       cfg.ID,
-			Name:     cfg.Name,
-			Provider: cfg.Provider,
-			Address:  cfg.Host,
-			User:     cfg.User,
-			Password: cfg.Password,
-			Client:   client,
+			ID:          cfg.ID,
+			Name:        cfg.Name,
+			Provider:    cfg.Provider,
+			Address:     cfg.Host,
+			User:        cfg.User,
+			Password:    cfg.Password,
+			sensorNames: cfg.SensorNames,
+			Client:      client,
 		}
 		if cfg.HasKVM() {
 			port, tls := cfg.KVMEndpoint()

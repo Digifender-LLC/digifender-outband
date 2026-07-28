@@ -11,16 +11,16 @@ import (
 	"os"
 	"time"
 
-	"mipmi/internal/amiweb"
+	"outband/internal/amiweb"
 )
 
 func main() {
 	ctx := context.Background()
-	host := env("MIPMI_BMC_HOST", "192.168.9.74")
-	user := env("MIPMI_BMC_USER", "root")
-	pass := os.Getenv("MIPMI_BMC_PASS")
+	host := env("OUTBAND_BMC_HOST", "192.168.9.74")
+	user := env("OUTBAND_BMC_USER", "root")
+	pass := os.Getenv("OUTBAND_BMC_PASS")
 	if pass == "" {
-		fmt.Fprintln(os.Stderr, "MIPMI_BMC_PASS required")
+		fmt.Fprintln(os.Stderr, "OUTBAND_BMC_PASS required")
 		os.Exit(2)
 	}
 	sess, err := amiweb.Login(ctx, host, user, pass)

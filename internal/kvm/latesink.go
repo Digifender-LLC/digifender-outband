@@ -3,7 +3,7 @@ package kvm
 import (
 	"sync/atomic"
 
-	"mipmi/internal/rfb"
+	"outband/internal/rfb"
 )
 
 // lateSink is an rfb.Sink whose backing sink is published asynchronously once
