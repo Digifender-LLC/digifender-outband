@@ -1,0 +1,24 @@
+{{define "kvm.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body class="console-body">
+  <div class="shell console-shell">
+    {{template "nav" .}}
+    <main class="main console-main">
+      <header class="page-head compact">
+        <h1>KVM</h1>
+        <p class="lede">Native AMI Adviser/IVTP video console via noVNC. One session at a time.</p>
+      </header>
+      <p id="kvm-banner" class="sol-banner">{{.Status}} · port {{.Port}}{{if .TLS}} (TLS){{end}}</p>
+      <iframe
+        class="kvm-frame"
+        title="KVM console"
+        src="/static/novnc/vnc.html?autoconnect=true&reconnect=true&path=ws/kvm&resize=scale&show_dot=true"
+        allow="clipboard-read; clipboard-write"
+      ></iframe>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}
