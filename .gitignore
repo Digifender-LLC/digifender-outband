@@ -1,0 +1,11 @@
+.env
+*.pem
+*.key
+wireguard-export.zip
+**/wg*.conf
+bin/
+/mipmi
+dist/
+data/
+*.db
+*.db-*
