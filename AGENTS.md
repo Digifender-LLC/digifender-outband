@@ -52,6 +52,8 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 - **BMC credentials are server-side only.** The browser only ever sees `MIPMI_UI_PASS`.
 - **Match existing style.** Prefer small, focused packages; keep HTMX partials boring and readable; avoid drive-by refactors unrelated to the task.
 - **Providers behind `bmc.Client`.** New vendor support goes through the registry — do not special-case iDRAC/AMT/IPMI in the HTTP layer.
+- **Unimplemented inventory hosts are skipped.** Stub providers (`idrac`/`amt`) return `provider.ErrNotImplemented`; `hosts.Open` warns and continues. Unknown providers and a stub `MIPMI_DEFAULT_HOST` still fail startup. At least one usable host is required.
+- **Capabilities drive UI and polling.** Implement `bmc.Capabilities` and omit unsupported bits (`FeatureConsole`, `FeatureKVM`, etc.). HTTP nav/routes and the telemetry collector consult `bmc.ClientFeatures`; missing features are hidden / skipped (501 if hit directly). IPMI advertises the full set including KVM. SOL is via optional `bmc.Console` (advertised with `FeatureConsole`), not part of `bmc.Client`.
 - **Host-keyed telemetry.** Store and collector keys are host IDs; the UI still binds one active host for now.
 - **One SOL session / one KVM session** per process (or per active host adapter). Second clients should get a clear busy/conflict response.
 - **Tests.** Prefer table-driven unit tests next to the package (`*_test.go`). Do not require a live BMC for `go test ./...`.

@@ -48,7 +48,9 @@ Inventory priority: `MIPMI_HOSTS` (JSON) → `MIPMI_HOSTS_FILE` (YAML/JSON path)
 
 The UI still binds to one **active** host (`MIPMI_DEFAULT_HOST`, or the first inventory entry). Fleet UI is not implemented yet; internals and telemetry are host-keyed for a later multi-host UI.
 
-Providers: `ipmi` (implemented); `idrac` / `amt` are registered stubs (not implemented).
+Providers: `ipmi` (implemented); `idrac` / `amt` are registered stubs (not implemented). Unimplemented inventory entries are skipped at startup with a warning; the process fails if no usable hosts remain or if `MIPMI_DEFAULT_HOST` points at a stub. The active default must be an implemented provider.
+
+UI nav and telemetry follow `bmc.Capabilities` on the active host’s client. The IPMI provider advertises the full control plane plus KVM. Providers must omit unsupported features rather than advertising them and failing at runtime.
 
 Open http://127.0.0.1:8080 and log in with `MIPMI_UI_PASS`.
 
@@ -70,6 +72,18 @@ docker compose up --build
 On a LAN host next to the BMC, point `MIPMI_BMC_HOST` at the BMC LAN IP. If UDP/IPMI is flaky through userland Docker networking, try `network_mode: host` in compose.
 
 To use JSON inventory in Compose, set `MIPMI_HOSTS` (and optionally `MIPMI_DEFAULT_HOST`) instead of the legacy `MIPMI_BMC_*` vars — see comments in `docker-compose.yml`.
+
+### Prebuilt image (GHCR)
+
+Alpha images are published to GitHub Container Registry on version tags:
+
+```bash
+docker pull ghcr.io/theminecraftguyguru/mipmi:alpha
+# or a specific release:
+docker pull ghcr.io/theminecraftguyguru/mipmi:v0.1.0-alpha.1
+```
+
+Run with the same env vars as Compose (`MIPMI_UI_PASS`, BMC credentials or `MIPMI_HOSTS`, etc.). Package pages: [ghcr.io/theminecraftguyguru/mipmi](https://github.com/TheMinecraftGuyGuru/mipmi/pkgs/container/mipmi).
 
 ## Layout
 

@@ -66,13 +66,23 @@ func (c *Collector) Run(ctx context.Context) {
 		c.HostID = "default"
 	}
 
+	features := bmc.ClientFeatures(c.Client)
+
 	_ = c.Store.LoadSnapshots(c.HostID)
 
 	// Warm immediately so post-login HTMX can hit a filled store.
-	c.pollMCInfo(ctx)
-	c.pollPower(ctx)
-	c.pollSensors(ctx)
-	c.pollSEL(ctx)
+	if features.Has(bmc.FeatureIdentity) {
+		c.pollMCInfo(ctx)
+	}
+	if features.Has(bmc.FeaturePower) {
+		c.pollPower(ctx)
+	}
+	if features.Has(bmc.FeatureSensors) {
+		c.pollSensors(ctx)
+	}
+	if features.Has(bmc.FeatureSEL) {
+		c.pollSEL(ctx)
+	}
 
 	sensorsT := time.NewTicker(iv.Sensors)
 	powerT := time.NewTicker(iv.Power)
@@ -87,6 +97,7 @@ func (c *Collector) Run(ctx context.Context) {
 
 	c.Log.Info("telemetry collector running",
 		"host", c.HostID,
+		"features", uint64(features),
 		"sensors", iv.Sensors,
 		"power", iv.Power,
 		"sel", iv.SEL,
@@ -100,13 +111,21 @@ func (c *Collector) Run(ctx context.Context) {
 			c.Log.Info("telemetry collector stopped", "host", c.HostID)
 			return
 		case <-sensorsT.C:
-			c.pollSensors(ctx)
+			if features.Has(bmc.FeatureSensors) {
+				c.pollSensors(ctx)
+			}
 		case <-powerT.C:
-			c.pollPower(ctx)
+			if features.Has(bmc.FeaturePower) {
+				c.pollPower(ctx)
+			}
 		case <-selT.C:
-			c.pollSEL(ctx)
+			if features.Has(bmc.FeatureSEL) {
+				c.pollSEL(ctx)
+			}
 		case <-mcT.C:
-			c.pollMCInfo(ctx)
+			if features.Has(bmc.FeatureIdentity) {
+				c.pollMCInfo(ctx)
+			}
 		case <-pruneT.C:
 			if err := c.Store.Prune(c.Retention); err != nil {
 				c.Log.Warn("telemetry prune", "err", err)

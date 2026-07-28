@@ -28,7 +28,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	registry, err := hosts.Open(cfg.Hosts, cfg.DefaultHost)
+	registry, err := hosts.Open(cfg.Hosts, cfg.DefaultHost, log)
 	if err != nil {
 		log.Error("hosts", "err", err)
 		os.Exit(1)

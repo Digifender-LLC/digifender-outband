@@ -11,12 +11,12 @@
   <a class="brand" href="/">mIPMI</a>
   <nav class="nav">
     <a href="/" {{if eq .Active "dashboard"}}aria-current="page"{{end}}>Dashboard</a>
-    <a href="/power" {{if eq .Active "power"}}aria-current="page"{{end}}>Power</a>
-    <a href="/sensors" {{if eq .Active "sensors"}}aria-current="page"{{end}}>Sensors</a>
-    <a href="/metrics" {{if eq .Active "metrics"}}aria-current="page"{{end}}>Metrics</a>
-    <a href="/sel" {{if eq .Active "sel"}}aria-current="page"{{end}}>SEL</a>
-    <a href="/console" {{if eq .Active "console"}}aria-current="page"{{end}}>Console</a>
-    <a href="/kvm" {{if eq .Active "kvm"}}aria-current="page"{{end}}>KVM</a>
+    {{if .ShowPower}}<a href="/power" {{if eq .Active "power"}}aria-current="page"{{end}}>Power</a>{{end}}
+    {{if .ShowSensors}}<a href="/sensors" {{if eq .Active "sensors"}}aria-current="page"{{end}}>Sensors</a>{{end}}
+    {{if .ShowSensors}}<a href="/metrics" {{if eq .Active "metrics"}}aria-current="page"{{end}}>Metrics</a>{{end}}
+    {{if .ShowSEL}}<a href="/sel" {{if eq .Active "sel"}}aria-current="page"{{end}}>SEL</a>{{end}}
+    {{if .ShowConsole}}<a href="/console" {{if eq .Active "console"}}aria-current="page"{{end}}>Console</a>{{end}}
+    {{if .ShowKVM}}<a href="/kvm" {{if eq .Active "kvm"}}aria-current="page"{{end}}>KVM</a>{{end}}
   </nav>
   <div class="top-meta">
     <span class="host">{{.BMCHost}}</span>

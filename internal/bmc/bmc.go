@@ -3,6 +3,7 @@ package bmc
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 )
@@ -26,6 +27,7 @@ const (
 	FeatureSEL
 	FeatureConsole // serial / SOL-style console
 	FeatureIdentity
+	FeatureKVM // video KVM (e.g. AMI Adviser/IVTP)
 )
 
 // FeatureSet is a bitmask of supported features.
@@ -36,14 +38,50 @@ func (s FeatureSet) Has(f Feature) bool {
 	return Feature(s)&f != 0
 }
 
-// AllIPMIFeatures is the feature set exposed by the IPMI adapter.
-func AllIPMIFeatures() FeatureSet {
+// controlPlaneFeatures is the legacy default when a Client does not implement Capabilities.
+// KVM is omitted because it is vendor-specific.
+func controlPlaneFeatures() FeatureSet {
 	return FeatureSet(FeaturePower | FeatureSensors | FeatureSEL | FeatureConsole | FeatureIdentity)
 }
+
+// AllIPMIFeatures is the feature set exposed by the IPMI adapter (including AMI KVM).
+func AllIPMIFeatures() FeatureSet {
+	return controlPlaneFeatures() | FeatureSet(FeatureKVM)
+}
+
+// ErrUnsupported indicates the BMC/provider does not support the requested operation.
+var ErrUnsupported = errors.New("unsupported")
+
+// ErrBusy indicates a resource (e.g. SOL session) is already in use.
+var ErrBusy = errors.New("busy")
 
 // Capabilities is an optional interface providers may implement.
 type Capabilities interface {
 	Features() FeatureSet
+}
+
+// Console is an optional interface for Serial-over-LAN (or equivalent) console access.
+// Advertise support with FeatureConsole; obtain via AsConsole.
+type Console interface {
+	OpenSOL(ctx context.Context) (SOLSession, error)
+}
+
+// AsConsole returns the Console implementation if c supports it.
+func AsConsole(c Client) (Console, bool) {
+	con, ok := c.(Console)
+	return con, ok
+}
+
+// ClientFeatures returns the feature set for c. If c implements Capabilities, that
+// set is used; otherwise the control-plane defaults without KVM are assumed.
+func ClientFeatures(c Client) FeatureSet {
+	if c == nil {
+		return 0
+	}
+	if cap, ok := c.(Capabilities); ok {
+		return cap.Features()
+	}
+	return controlPlaneFeatures()
 }
 
 // MCInfo is identity/firmware information from the BMC.
@@ -92,12 +130,12 @@ type SOLSession interface {
 }
 
 // Client is the BMC control plane used by HTTP handlers.
+// Serial console is optional; see Console and FeatureConsole.
 type Client interface {
 	MCInfo(ctx context.Context) (*MCInfo, error)
 	PowerStatus(ctx context.Context) (*PowerStatus, error)
 	PowerControl(ctx context.Context, action PowerAction) error
 	Sensors(ctx context.Context) ([]Sensor, error)
 	SEL(ctx context.Context, limit int) ([]SELEntry, error)
-	OpenSOL(ctx context.Context) (SOLSession, error)
 	Close() error
 }

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -22,13 +23,14 @@ import (
 
 // Server is the HTMX HTTP front-end.
 type Server struct {
-	host    *hosts.Host
-	gate    *Gate
-	store   *telemetry.Store
-	kvm     *kvm.Bridge
-	log     *slog.Logger
-	tmpl    *template.Template
-	mux     *http.ServeMux
+	host     *hosts.Host
+	gate     *Gate
+	store    *telemetry.Store
+	kvm      *kvm.Bridge // nil when FeatureKVM is absent
+	features bmc.FeatureSet
+	log      *slog.Logger
+	tmpl     *template.Template
+	mux      *http.ServeMux
 	upgrader websocket.Upgrader
 }
 
@@ -44,15 +46,20 @@ func New(host *hosts.Host, gate *Gate, store *telemetry.Store, log *slog.Logger)
 	if err != nil {
 		return nil, err
 	}
-	bridge := kvm.NewBridge(host.Address, host.User, host.Password, host.KVMPort, host.KVMTLS, log)
+	features := bmc.ClientFeatures(host.Client)
+	var bridge *kvm.Bridge
+	if features.Has(bmc.FeatureKVM) {
+		bridge = kvm.NewBridge(host.Address, host.User, host.Password, host.KVMPort, host.KVMTLS, log)
+	}
 	s := &Server{
-		host:  host,
-		gate:  gate,
-		store: store,
-		kvm:   bridge,
-		log:   log,
-		tmpl:  tmpl,
-		mux:   http.NewServeMux(),
+		host:     host,
+		gate:     gate,
+		store:    store,
+		kvm:      bridge,
+		features: features,
+		log:      log,
+		tmpl:     tmpl,
+		mux:      http.NewServeMux(),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -115,15 +122,37 @@ func (s *Server) Handler() http.Handler {
 }
 
 type pageData struct {
-	Title   string
-	Active  string
-	BMCHost string
-	Error   string
-	Flash   string
+	Title       string
+	Active      string
+	BMCHost     string
+	Error       string
+	Flash       string
+	ShowPower   bool
+	ShowSensors bool
+	ShowSEL     bool
+	ShowConsole bool
+	ShowKVM     bool
 }
 
 func (s *Server) page(title, active string) pageData {
-	return pageData{Title: title, Active: active, BMCHost: s.displayHost()}
+	return pageData{
+		Title:       title,
+		Active:      active,
+		BMCHost:     s.displayHost(),
+		ShowPower:   s.features.Has(bmc.FeaturePower),
+		ShowSensors: s.features.Has(bmc.FeatureSensors),
+		ShowSEL:     s.features.Has(bmc.FeatureSEL),
+		ShowConsole: s.features.Has(bmc.FeatureConsole),
+		ShowKVM:     s.features.Has(bmc.FeatureKVM),
+	}
+}
+
+func (s *Server) requireFeature(w http.ResponseWriter, f bmc.Feature, label string) bool {
+	if s.features.Has(f) {
+		return true
+	}
+	http.Error(w, label+" not supported by this BMC", http.StatusNotImplemented)
+	return false
 }
 
 func (s *Server) render(w http.ResponseWriter, name string, data any) {
@@ -221,6 +250,9 @@ type powerPageData struct {
 }
 
 func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeaturePower, "Power") {
+		return
+	}
 	d := powerPageData{pageData: s.page("Power", "power")}
 	meta := s.store.Meta(s.hostID())
 	if meta.LastError != "" {
@@ -235,6 +267,9 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePowerPartial(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeaturePower, "Power") {
+		return
+	}
 	d := powerPageData{pageData: s.page("Power", "power")}
 	meta := s.store.Meta(s.hostID())
 	if meta.LastError != "" {
@@ -249,6 +284,9 @@ func (s *Server) handlePowerPartial(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePowerAction(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeaturePower, "Power") {
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
@@ -280,6 +318,9 @@ type sensorsPageData struct {
 }
 
 func (s *Server) handleSensors(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureSensors, "Sensors") {
+		return
+	}
 	d := sensorsPageData{pageData: s.page("Sensors", "sensors")}
 	meta := s.store.Meta(s.hostID())
 	if meta.LastError != "" {
@@ -294,6 +335,9 @@ func (s *Server) handleSensors(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSensorsPartial(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureSensors, "Sensors") {
+		return
+	}
 	d := sensorsPageData{pageData: s.page("Sensors", "sensors")}
 	meta := s.store.Meta(s.hostID())
 	if meta.LastError != "" {
@@ -315,6 +359,9 @@ type selPageData struct {
 }
 
 func (s *Server) handleSEL(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureSEL, "SEL") {
+		return
+	}
 	d := selPageData{pageData: s.page("SEL", "sel")}
 	meta := s.store.Meta(s.hostID())
 	if meta.LastError != "" {
@@ -329,6 +376,9 @@ func (s *Server) handleSEL(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSELPartial(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureSEL, "SEL") {
+		return
+	}
 	d := selPageData{pageData: s.page("SEL", "sel")}
 	meta := s.store.Meta(s.hostID())
 	if meta.LastError != "" {
@@ -350,6 +400,9 @@ type metricsPageData struct {
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureSensors, "Metrics") {
+		return
+	}
 	rng := r.URL.Query().Get("range")
 	if rng == "" {
 		rng = "1h"
@@ -418,6 +471,9 @@ func defaultMetricSensors(names []string) []string {
 }
 
 func (s *Server) handleAPIMetrics(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureSensors, "Metrics") {
+		return
+	}
 	q := r.URL.Query()
 	sensors := q["sensor"]
 	if len(sensors) == 0 {
@@ -489,15 +545,29 @@ type kvmPageData struct {
 }
 
 func (s *Server) handleKVM(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureKVM, "KVM") {
+		return
+	}
+	status := "unavailable"
+	if s.kvm != nil {
+		status = s.kvm.Status()
+	}
 	s.render(w, "kvm.html", kvmPageData{
 		pageData: s.page("KVM", "kvm"),
-		Status:   s.kvm.Status(),
+		Status:   status,
 		Port:     s.host.KVMPort,
 		TLS:      s.host.KVMTLS,
 	})
 }
 
 func (s *Server) handleKVMWS(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureKVM, "KVM") {
+		return
+	}
+	if s.kvm == nil {
+		http.Error(w, "KVM not supported by this BMC", http.StatusNotImplemented)
+		return
+	}
 	src, sink, release, err := s.kvm.Acquire(r.Context())
 	if err != nil {
 		if err == kvm.ErrBusy {
@@ -524,10 +594,21 @@ func (s *Server) handleKVMWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConsole(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureConsole, "Console") {
+		return
+	}
 	s.render(w, "console.html", s.page("SOL Console", "console"))
 }
 
 func (s *Server) handleSOLWS(w http.ResponseWriter, r *http.Request) {
+	if !s.requireFeature(w, bmc.FeatureConsole, "Console") {
+		return
+	}
+	console, ok := bmc.AsConsole(s.host.Client)
+	if !ok {
+		http.Error(w, "Console not supported by this BMC", http.StatusNotImplemented)
+		return
+	}
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		s.log.Error("ws upgrade", "err", err)
@@ -535,9 +616,13 @@ func (s *Server) handleSOLWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	sess, err := s.host.Client.OpenSOL(r.Context())
+	sess, err := console.OpenSOL(r.Context())
 	if err != nil {
-		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n*** SOL unavailable: "+err.Error()+" ***\r\n"))
+		msg := "SOL unavailable: " + err.Error()
+		if errors.Is(err, bmc.ErrBusy) {
+			msg = "SOL session busy"
+		}
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("\r\n*** "+msg+" ***\r\n"))
 		return
 	}
 	defer sess.Close()

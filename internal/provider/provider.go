@@ -62,3 +62,11 @@ func Names() []string {
 	}
 	return out
 }
+
+// Known reports whether a provider name is registered.
+func Known(name string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	_, ok := factories[name]
+	return ok
+}

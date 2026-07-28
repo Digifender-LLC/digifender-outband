@@ -22,7 +22,7 @@ type Config struct {
 	CipherID int // -1 = library default
 }
 
-// Adapter implements bmc.Client.
+// Adapter implements bmc.Client and bmc.Console.
 type Adapter struct {
 	cfg Config
 
@@ -317,7 +317,7 @@ func (a *Adapter) OpenSOL(ctx context.Context) (bmc.SOLSession, error) {
 	a.solMu.Lock()
 	if a.solActive {
 		a.solMu.Unlock()
-		return nil, fmt.Errorf("SOL session already active")
+		return nil, fmt.Errorf("SOL session already active: %w", bmc.ErrBusy)
 	}
 	a.solActive = true
 	a.solMu.Unlock()

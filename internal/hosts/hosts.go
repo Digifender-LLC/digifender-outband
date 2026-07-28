@@ -2,7 +2,9 @@
 package hosts
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
 
 	"mipmi/internal/bmc"
 	"mipmi/internal/config"
@@ -38,7 +40,14 @@ type Registry struct {
 }
 
 // Open builds clients for every inventory entry via the provider factory.
-func Open(cfgs []config.HostConfig, defaultID string) (*Registry, error) {
+// Entries whose provider returns provider.ErrNotImplemented are skipped with a
+// warning. Unknown providers and other factory errors fail Open. If defaultID
+// is empty, the first successfully opened host becomes the default; if
+// defaultID was set but skipped, Open fails.
+func Open(cfgs []config.HostConfig, defaultID string, log *slog.Logger) (*Registry, error) {
+	if log == nil {
+		log = slog.Default()
+	}
 	if len(cfgs) == 0 {
 		return nil, fmt.Errorf("hosts: empty inventory")
 	}
@@ -46,9 +55,21 @@ func Open(cfgs []config.HostConfig, defaultID string) (*Registry, error) {
 		byID:      make(map[string]*Host, len(cfgs)),
 		defaultID: defaultID,
 	}
+	var skippedDefault bool
 	for _, cfg := range cfgs {
 		client, err := provider.New(cfg)
 		if err != nil {
+			if errors.Is(err, provider.ErrNotImplemented) {
+				log.Warn("skipping unimplemented host",
+					"id", cfg.ID,
+					"provider", cfg.Provider,
+					"err", err,
+				)
+				if defaultID != "" && cfg.ID == defaultID {
+					skippedDefault = true
+				}
+				continue
+			}
 			_ = r.Close()
 			return nil, err
 		}
@@ -69,6 +90,14 @@ func Open(cfgs []config.HostConfig, defaultID string) (*Registry, error) {
 		}
 		r.order = append(r.order, cfg.ID)
 		r.byID[cfg.ID] = h
+	}
+	if len(r.order) == 0 {
+		_ = r.Close()
+		return nil, fmt.Errorf("hosts: no usable hosts (all providers unimplemented or failed)")
+	}
+	if skippedDefault {
+		_ = r.Close()
+		return nil, fmt.Errorf("hosts: default host %q skipped: provider not implemented", defaultID)
 	}
 	if r.defaultID == "" {
 		r.defaultID = r.order[0]
