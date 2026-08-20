@@ -1,4 +1,6 @@
 (function () {
+  var pollTimer;
+
   function syncMediaPanel(panel) {
     if (!panel) return;
     var checked = panel.querySelector('input[name=source]:checked');
@@ -18,6 +20,25 @@
     if (url) url.required = mode === 'url';
   }
 
+  function stopMediaPoll() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function startMediaPoll(panel) {
+    stopMediaPoll();
+    if (!panel || panel.dataset.poll !== '1' || !panel.dataset.pollUrl) return;
+    pollTimer = setInterval(function () {
+      if (typeof htmx === 'undefined') return;
+      htmx.ajax('GET', panel.dataset.pollUrl, {
+        target: '#media-panel',
+        swap: 'outerHTML',
+      });
+    }, 1000);
+  }
+
   function panelFromEvent(e) {
     if (e.target && e.target.id === 'media-panel') return e.target;
     if (e.target && e.target.querySelector) {
@@ -32,14 +53,26 @@
   });
 
   document.body.addEventListener('htmx:afterSwap', function (e) {
-    syncMediaPanel(panelFromEvent(e));
+    var panel = panelFromEvent(e);
+    syncMediaPanel(panel);
+    startMediaPoll(panel);
+  });
+
+  document.body.addEventListener('htmx:beforeRequest', function (e) {
+    if (e.target.closest && e.target.closest('#media-panel form')) {
+      stopMediaPoll();
+    }
   });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
-      syncMediaPanel(document.getElementById('media-panel'));
+      var panel = document.getElementById('media-panel');
+      syncMediaPanel(panel);
+      startMediaPoll(panel);
     });
   } else {
-    syncMediaPanel(document.getElementById('media-panel'));
+    var panel = document.getElementById('media-panel');
+    syncMediaPanel(panel);
+    startMediaPoll(panel);
   }
 })();

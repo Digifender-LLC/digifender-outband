@@ -22,7 +22,7 @@ func TestMediaCacheRetainAndReuse(t *testing.T) {
 	c := NewMediaCache(dir, time.Hour)
 
 	ctx := context.Background()
-	path1, release1, err := c.GetOrDownload(ctx, srv.URL)
+	path1, release1, err := c.GetOrDownload(ctx, srv.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestMediaCacheRetainAndReuse(t *testing.T) {
 	}
 	release1()
 
-	path2, release2, err := c.GetOrDownload(ctx, srv.URL)
+	path2, release2, err := c.GetOrDownload(ctx, srv.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

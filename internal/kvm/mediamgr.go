@@ -44,9 +44,11 @@ type MediaManager struct {
 	cache    *MediaCache
 	log      *slog.Logger
 
-	mu     sync.Mutex
-	stop   func()
-	status MediaStatus
+	mu          sync.Mutex
+	stop        func()
+	status      MediaStatus
+	activity    MediaActivity
+	mountCancel context.CancelFunc
 }
 
 // NewMediaManager prepares a virtual-media controller (not yet connected).
@@ -73,6 +75,20 @@ func (m *MediaManager) Status() MediaStatus {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.status
+}
+
+// Activity returns background download/mount progress, if any.
+func (m *MediaManager) Activity() MediaActivity {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.activity
+}
+
+// Busy reports whether a mount or background cache job is in progress.
+func (m *MediaManager) Busy() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.stop != nil || m.activity.Active
 }
 
 // ListISOs returns .iso basenames available under the media directory.
@@ -148,11 +164,126 @@ func (m *MediaManager) Mount(ctx context.Context, isoPath string) error {
 
 // MountRequest attaches an ISO from the library or a remote URL.
 func (m *MediaManager) MountRequest(ctx context.Context, req MountRequest) error {
-	backing, label, source, delivery, cacheRelease, err := m.openBacking(ctx, req)
+	backing, label, source, delivery, cacheRelease, err := m.openBacking(ctx, req, nil)
 	if err != nil {
 		return err
 	}
 	return m.mountBacking(ctx, backing, label, source, delivery, req.URL, cacheRelease)
+}
+
+// WillCacheDownload reports whether req will download the URL before mounting.
+func (m *MediaManager) WillCacheDownload(ctx context.Context, req MountRequest) bool {
+	if req.Source != MountSourceURL {
+		return false
+	}
+	if _, ok := m.cache.LookupValid(req.URL); ok {
+		return false
+	}
+	switch req.Delivery {
+	case DeliveryCache:
+		return true
+	case DeliveryAuto:
+		size, ok, err := vmedia.SupportsRange(ctx, req.URL)
+		return err != nil || !ok || size <= 0
+	default:
+		return false
+	}
+}
+
+// StartMountRequest mounts immediately or starts a background cache download.
+// When async is true the caller should poll Activity() until it clears.
+func (m *MediaManager) StartMountRequest(ctx context.Context, req MountRequest) (async bool, err error) {
+	m.mu.Lock()
+	if m.activity.Active {
+		m.mu.Unlock()
+		return false, ErrMediaBusy
+	}
+	m.mu.Unlock()
+
+	if !m.WillCacheDownload(ctx, req) {
+		return false, m.MountRequest(ctx, req)
+	}
+	return true, m.startAsyncMount(ctx, req)
+}
+
+func (m *MediaManager) startAsyncMount(parent context.Context, req MountRequest) error {
+	m.mu.Lock()
+	if m.stop != nil || m.activity.Active {
+		m.mu.Unlock()
+		return ErrMediaBusy
+	}
+	ctx, cancel := context.WithCancel(parent)
+	m.mountCancel = cancel
+	m.activity = MediaActivity{
+		Active: true,
+		Phase:  "downloading",
+		URL:    req.URL,
+		Label:  urlLabel(req.URL),
+	}
+	m.mu.Unlock()
+
+	go func() {
+		defer cancel()
+
+		onProgress := func(done, total int64) {
+			m.mu.Lock()
+			m.activity.Done = done
+			if total > 0 {
+				m.activity.Total = total
+			}
+			m.mu.Unlock()
+		}
+
+		backing, label, source, delivery, cacheRelease, err := m.openBacking(ctx, req, onProgress)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				m.clearActivity()
+				return
+			}
+			m.setActivityError(err)
+			return
+		}
+
+		m.mu.Lock()
+		m.activity.Phase = "mounting"
+		m.mu.Unlock()
+
+		if err := m.mountBacking(ctx, backing, label, source, delivery, req.URL, cacheRelease); err != nil {
+			if errors.Is(err, context.Canceled) {
+				m.clearActivity()
+				return
+			}
+			m.setActivityError(err)
+			return
+		}
+		m.clearActivity()
+	}()
+	return nil
+}
+
+func (m *MediaManager) setActivityError(err error) {
+	m.mu.Lock()
+	m.activity.Err = err.Error()
+	m.activity.Active = false
+	m.mu.Unlock()
+}
+
+func (m *MediaManager) clearActivity() {
+	m.mu.Lock()
+	m.activity = MediaActivity{}
+	m.mountCancel = nil
+	m.mu.Unlock()
+}
+
+// TakeActivityError returns a pending background error message, if any.
+func (m *MediaManager) TakeActivityError() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	err := m.activity.Err
+	if err != "" {
+		m.activity.Err = ""
+	}
+	return err
 }
 
 func (m *MediaManager) mountBacking(ctx context.Context, backing mediaBacking, label, source, delivery, url string, cacheRelease func()) error {
@@ -166,6 +297,16 @@ func (m *MediaManager) mountBacking(ctx context.Context, backing mediaBacking, l
 		return ErrMediaBusy
 	}
 	m.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		backing.Close()
+		if cacheRelease != nil {
+			cacheRelease()
+		}
+		return ctx.Err()
+	default:
+	}
 
 	args, cookie, err := FetchLaunchArgs(ctx, m.host, m.user, m.pass)
 	if err != nil {
@@ -218,7 +359,7 @@ func (m *MediaManager) mountBacking(ctx context.Context, backing mediaBacking, l
 	return nil
 }
 
-func (m *MediaManager) openBacking(ctx context.Context, req MountRequest) (backing mediaBacking, label, source, delivery string, cacheRelease func(), err error) {
+func (m *MediaManager) openBacking(ctx context.Context, req MountRequest, onDownload downloadProgressFunc) (backing mediaBacking, label, source, delivery string, cacheRelease func(), err error) {
 	switch req.Source {
 	case MountSourceLibrary:
 		path, err := m.ResolveISO(req.Library)
@@ -237,14 +378,14 @@ func (m *MediaManager) openBacking(ctx context.Context, req MountRequest) (backi
 		case DeliveryStream:
 			return m.openURLStream(ctx, req.URL)
 		case DeliveryCache:
-			return m.openURLCache(ctx, req.URL)
+			return m.openURLCache(ctx, req.URL, onDownload)
 		case DeliveryAuto:
 			if size, ok, probeErr := vmedia.SupportsRange(ctx, req.URL); probeErr == nil && ok && size > 0 {
 				m.log.Info("media URL supports ranges; streaming", "url", req.URL)
 				return m.openURLStream(ctx, req.URL)
 			}
 			m.log.Info("media URL does not support ranges; caching", "url", req.URL)
-			return m.openURLCache(ctx, req.URL)
+			return m.openURLCache(ctx, req.URL, onDownload)
 		default:
 			return nil, "", "", "", nil, fmt.Errorf("media: invalid delivery %q", req.Delivery)
 		}
@@ -261,8 +402,8 @@ func (m *MediaManager) openURLStream(ctx context.Context, rawURL string) (backin
 	return r, urlLabel(rawURL), "url-stream", "stream", nil, nil
 }
 
-func (m *MediaManager) openURLCache(ctx context.Context, rawURL string) (backing mediaBacking, label, source, delivery string, cacheRelease func(), err error) {
-	path, release, err := m.cache.GetOrDownload(ctx, rawURL)
+func (m *MediaManager) openURLCache(ctx context.Context, rawURL string, onDownload downloadProgressFunc) (backing mediaBacking, label, source, delivery string, cacheRelease func(), err error) {
+	path, release, err := m.cache.GetOrDownload(ctx, rawURL, onDownload)
 	if err != nil {
 		return nil, "", "", "", nil, err
 	}
@@ -287,13 +428,19 @@ func urlLabel(raw string) string {
 	return raw
 }
 
-// Unmount tears down the active redirection.
+// Unmount tears down the active redirection and cancels background cache jobs.
 func (m *MediaManager) Unmount() {
 	m.mu.Lock()
+	cancel := m.mountCancel
 	stop := m.stop
 	m.stop = nil
 	m.status = MediaStatus{}
+	m.activity = MediaActivity{}
+	m.mountCancel = nil
 	m.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	if stop != nil {
 		stop()
 		_ = m.cache.PurgeExpired()

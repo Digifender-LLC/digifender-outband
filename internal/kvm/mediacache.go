@@ -47,9 +47,39 @@ func (c *MediaCache) PurgeExpired() error {
 	return c.purgeExpiredLocked()
 }
 
+// LookupValid returns a retained cache path for url when one is still usable.
+func (c *MediaCache) LookupValid(url string) (path string, ok bool) {
+	if err := os.MkdirAll(c.dir, 0o755); err != nil {
+		return "", false
+	}
+	key, err := cacheKey(url)
+	if err != nil {
+		return "", false
+	}
+	isoPath := filepath.Join(c.dir, key+".iso")
+	metaPath := isoPath + cacheMetaSuffix
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	st, err := os.Stat(isoPath)
+	if err != nil || st.IsDir() {
+		return "", false
+	}
+	meta, err := readCacheMeta(metaPath)
+	if err != nil || meta.URL != url {
+		return "", false
+	}
+	if !meta.RetainUntil.IsZero() && time.Now().After(meta.RetainUntil) {
+		return "", false
+	}
+	return isoPath, true
+}
+
 // GetOrDownload returns a cached ISO path for url, downloading when needed.
 // The returned release func must run on unmount to start the retention timer.
-func (c *MediaCache) GetOrDownload(ctx context.Context, url string) (path string, release func(), err error) {
+// onProgress is optional; total is Content-Length when known (else 0).
+func (c *MediaCache) GetOrDownload(ctx context.Context, url string, onProgress downloadProgressFunc) (path string, release func(), err error) {
 	if err := os.MkdirAll(c.dir, 0o755); err != nil {
 		return "", nil, err
 	}
@@ -76,7 +106,7 @@ func (c *MediaCache) GetOrDownload(ctx context.Context, url string) (path string
 		}
 	}
 
-	if err := downloadISO(ctx, url, isoPath); err != nil {
+	if err := downloadISO(ctx, url, isoPath, onProgress); err != nil {
 		return "", nil, err
 	}
 	if err := writeCacheMeta(metaPath, cacheMeta{URL: url, RetainUntil: time.Time{}}); err != nil {
@@ -121,7 +151,7 @@ func (c *MediaCache) purgeExpiredLocked() error {
 	return nil
 }
 
-func downloadISO(ctx context.Context, url, dest string) error {
+func downloadISO(ctx context.Context, url, dest string, onProgress downloadProgressFunc) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -139,7 +169,18 @@ func downloadISO(ctx context.Context, url, dest string) error {
 	if err != nil {
 		return err
 	}
-	_, copyErr := io.Copy(f, resp.Body)
+	total := resp.ContentLength
+	if total < 0 {
+		total = 0
+	}
+	if onProgress != nil {
+		onProgress(0, total)
+	}
+	src := io.Reader(resp.Body)
+	if onProgress != nil {
+		src = &progressReader{r: resp.Body, total: total, fn: onProgress}
+	}
+	_, copyErr := io.Copy(f, src)
 	closeErr := f.Close()
 	if copyErr != nil {
 		_ = os.Remove(tmp)
@@ -152,6 +193,9 @@ func downloadISO(ctx context.Context, url, dest string) error {
 	if err := os.Rename(tmp, dest); err != nil {
 		_ = os.Remove(tmp)
 		return err
+	}
+	if onProgress != nil && total > 0 {
+		onProgress(total, total)
 	}
 	return nil
 }

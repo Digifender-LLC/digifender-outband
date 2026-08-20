@@ -883,6 +883,8 @@ type mediaPageData struct {
 	CacheTTL  string
 	ISOs      []string
 	Status    kvm.MediaStatus
+	Activity  kvm.MediaActivity
+	PollMedia bool
 	ErrMsg    string
 	Result    string
 }
@@ -904,6 +906,13 @@ func (s *Server) loadMediaPage(h *hosts.Host) mediaPageData {
 	d.MediaDir = mgr.MediaDir()
 	d.CacheTTL = formatMediaCacheTTL(s.mediaCacheTTL)
 	d.Status = mgr.Status()
+	act := mgr.Activity()
+	d.Activity = act
+	if act.Err != "" && d.ErrMsg == "" {
+		d.ErrMsg = act.Err
+		_ = mgr.TakeActivityError()
+	}
+	d.PollMedia = act.Active
 	isos, err := mgr.ListISOs()
 	if err != nil {
 		d.ErrMsg = err.Error()
@@ -954,19 +963,25 @@ func (s *Server) handleMediaMount(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "partials/media_panel.html", d)
 		return
 	}
+	if mgr.Busy() {
+		d.ErrMsg = "Virtual media is busy — wait for the current operation to finish"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
 	req, err := kvm.ParseMountRequest(r.FormValue("source"), r.FormValue("iso"), r.FormValue("url"), r.FormValue("delivery"))
 	if err != nil {
 		d.ErrMsg = err.Error()
 		s.render(w, "partials/media_panel.html", d)
 		return
 	}
-	if err := mgr.MountRequest(r.Context(), req); err != nil {
+	async, err := mgr.StartMountRequest(r.Context(), req)
+	if err != nil {
 		if errors.Is(err, kvm.ErrMediaBusy) {
 			d.ErrMsg = "Another ISO is already mounted — unmount first"
 		} else {
 			d.ErrMsg = err.Error()
 		}
-	} else {
+	} else if !async {
 		switch req.Source {
 		case kvm.MountSourceURL:
 			d.Result = fmt.Sprintf("Mounted URL as virtual CD-ROM (%s)", req.Delivery)
@@ -974,8 +989,7 @@ func (s *Server) handleMediaMount(w http.ResponseWriter, r *http.Request) {
 			d.Result = fmt.Sprintf("Mounted %s as virtual CD-ROM", req.Library)
 		}
 	}
-	d.Status = mgr.Status()
-	d.ISOs, _ = mgr.ListISOs()
+	d = s.loadMediaPage(h)
 	s.render(w, "partials/media_panel.html", d)
 }
 
@@ -996,6 +1010,11 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	if d.Status.Mounted {
 		d.ErrMsg = "Unmount the current ISO before uploading"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	if mgr.Busy() {
+		d.ErrMsg = "Virtual media is busy — wait for the current operation to finish"
 		s.render(w, "partials/media_panel.html", d)
 		return
 	}

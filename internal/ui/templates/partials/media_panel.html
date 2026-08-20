@@ -1,5 +1,8 @@
 {{define "partials/media_panel.html"}}
-<div id="media-panel" class="panel media-panel" data-source="library">
+<div id="media-panel"
+     class="panel media-panel"
+     data-source="library"
+     {{if .PollMedia}}data-poll="1" data-poll-url="{{.HostBase}}/partials/media"{{end}}>
   <div class="media-status">
     {{if .Status.Mounted}}
     <p class="subhead">Virtual CD-ROM</p>
@@ -23,6 +26,16 @@
       </div>
       {{end}}
     </dl>
+    {{else if .Activity.Active}}
+    <p class="subhead">{{if eq .Activity.Phase "mounting"}}Mounting virtual CD-ROM{{else}}Downloading ISO{{end}}</p>
+    <p class="stat-meta">{{.Activity.Label}}</p>
+    {{if gt .Activity.Total 0}}
+    <progress class="media-progress-bar" max="{{.Activity.Total}}" value="{{.Activity.Done}}"></progress>
+    <p class="field-help">{{formatBytes .Activity.Done}} / {{formatBytes .Activity.Total}} · {{.Activity.Percent}}%</p>
+    {{else}}
+    <div class="media-progress-bar indeterminate" aria-busy="true"><span></span></div>
+    <p class="field-help">{{formatBytes .Activity.Done}} downloaded{{if eq .Activity.Phase "mounting"}} · connecting to BMC{{end}}</p>
+    {{end}}
     {{else}}
     <p class="subhead">Virtual CD-ROM</p>
     <p class="stat-meta">No ISO mounted. Choose a library file, upload one, or mount from a URL.</p>
@@ -40,7 +53,7 @@
         onsubmit="return confirm('Disconnect virtual CD-ROM from the host?')">
     <button class="btn danger" type="submit">Unmount</button>
   </form>
-  {{else}}
+  {{else if not .Activity.Active}}
   <div class="panel-grid media-grid">
     <section class="panel media-card">
       <h2 class="subhead">ISO library</h2>
@@ -112,7 +125,7 @@
             <option value="stream">Stream — HTTP Range (no full download)</option>
             <option value="cache">Cache — download for local reuse</option>
           </select>
-          <span class="field-help">Cached URLs are kept for {{.CacheTTL}} after unmount.</span>
+          <span class="field-help">Cache mode downloads the ISO first — progress appears above.</span>
         </label>
 
         <button class="btn primary" type="submit">Mount CD-ROM</button>
