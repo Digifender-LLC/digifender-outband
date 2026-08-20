@@ -104,6 +104,8 @@ export OUTBAND_BMC_HOST=192.168.9.74
 docker compose up --build
 ```
 
+The image defaults to `OUTBAND_MEDIA_DIR=/data/media` (writable by the non-root user). URL cache and uploads land under that path on the `/data` volume.
+
 If UDP/IPMI is flaky through userland Docker networking, try `network_mode: host`. For JSON inventory, set `OUTBAND_HOSTS` / `OUTBAND_DEFAULT_HOST` instead of legacy `OUTBAND_BMC_*` — see `docker-compose.yml`.
 
 ### Prebuilt image (GHCR)
@@ -148,7 +150,7 @@ Session cookie: `outband_session` (12h). BMC credentials never reach the browser
 |-----|--------|
 | `OUTBAND_LISTEN` | Default `:8080` |
 | `OUTBAND_DATA_DIR` | SQLite telemetry dir (default `./data`) |
-| `OUTBAND_MEDIA_DIR` | ISO library for AMI virtual media (default `./media`) |
+| `OUTBAND_MEDIA_DIR` | ISO library for AMI virtual media (default `./media`; Docker image uses `/data/media`) |
 | `OUTBAND_MEDIA_CACHE_TTL` | How long URL-downloaded ISOs stay cached after unmount (default `1h`) |
 | `OUTBAND_HOSTS_FILE` | Path to hosts YAML/JSON |
 | `OUTBAND_BMC_PORT` / `OUTBAND_CIPHER_SUITE` | Legacy single-host only |

@@ -7,6 +7,7 @@ services:
       OUTBAND_LISTEN: ":8080"
       OUTBAND_UI_PASS: "${OUTBAND_UI_PASS:?set OUTBAND_UI_PASS}"
       OUTBAND_DATA_DIR: /data
+      OUTBAND_MEDIA_DIR: /data/media
       # Optional OIDC SSO (when set, OUTBAND_UI_PASS can be break-glass only;
       # with complete OIDC you may omit OUTBAND_UI_PASS — adjust the ?set above):
       # OUTBAND_OIDC_ISSUER: "https://idp.example/realms/ops"

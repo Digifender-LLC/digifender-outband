@@ -1,94 +1,124 @@
 {{define "partials/media_panel.html"}}
-<div id="media-panel" class="panel">
-  {{if .Status.Mounted}}
-  <div class="stat-row">
-    <span class="stat-label">Mounted</span>
-    <span class="stat-value on">{{.Status.ISO}}</span>
+<div id="media-panel" class="panel media-panel" data-source="library">
+  <div class="media-status">
+    {{if .Status.Mounted}}
+    <p class="subhead">Virtual CD-ROM</p>
+    <dl class="facts">
+      <div>
+        <dt>Image</dt>
+        <dd>{{.Status.ISO}}</dd>
+      </div>
+      <div>
+        <dt>Size</dt>
+        <dd>{{formatBytes .Status.Size}}</dd>
+      </div>
+      <div>
+        <dt>Source</dt>
+        <dd>{{if .Status.Source}}{{.Status.Source}}{{else}}library{{end}}</dd>
+      </div>
+      {{if .Status.URL}}
+      <div class="media-fact-wide">
+        <dt>URL</dt>
+        <dd class="media-url">{{.Status.URL}}</dd>
+      </div>
+      {{end}}
+    </dl>
+    {{else}}
+    <p class="subhead">Virtual CD-ROM</p>
+    <p class="stat-meta">No ISO mounted. Choose a library file, upload one, or mount from a URL.</p>
+    {{end}}
   </div>
-  <p class="muted">{{formatBytes .Status.Size}} · virtual CD-ROM on port 5120{{if .Status.Source}} · {{.Status.Source}}{{end}}</p>
-  {{if .Status.URL}}<p class="muted"><code>{{.Status.URL}}</code></p>{{end}}
-  {{else}}
-  <div class="stat-row">
-    <span class="stat-label">Mounted</span>
-    <span class="stat-value off">None</span>
-  </div>
-  {{end}}
 
   {{if .Result}}<p class="ok" role="status">{{.Result}}</p>{{end}}
   {{if .ErrMsg}}<p class="err" role="alert">{{.ErrMsg}}</p>{{end}}
-
-  <p class="muted">ISO library: <code>{{.MediaDir}}</code> · URL cache retained {{.CacheTTL}} after unmount</p>
 
   {{if .Status.Mounted}}
   <form class="media-actions"
         hx-post="{{.HostBase}}/media/unmount"
         hx-target="#media-panel"
         hx-swap="outerHTML"
-        onsubmit="return confirm('Disconnect virtual CD-ROM?')">
-    <button class="btn danger" type="submit">Unmount ISO</button>
+        onsubmit="return confirm('Disconnect virtual CD-ROM from the host?')">
+    <button class="btn danger" type="submit">Unmount</button>
   </form>
   {{else}}
-  <form class="media-actions"
-        hx-post="{{.HostBase}}/media/mount"
-        hx-target="#media-panel"
-        hx-swap="outerHTML">
-    <fieldset class="field">
-      <legend class="field-label">Source</legend>
-      <label class="inline"><input type="radio" name="source" value="library" checked> Local library</label>
-      <label class="inline"><input type="radio" name="source" value="url"> Remote URL</label>
-    </fieldset>
+  <div class="panel-grid media-grid">
+    <section class="panel media-card">
+      <h2 class="subhead">ISO library</h2>
+      <p class="muted media-hint">Stored on the Outband server at <code>{{.MediaDir}}</code>.</p>
 
-    <label class="field library-only">
-      <span class="field-label">ISO image</span>
       {{if .ISOs}}
-      <select class="field-input" name="iso">
-        {{range .ISOs}}
-        <option value="{{.}}">{{.}}</option>
-        {{end}}
-      </select>
+      <ul class="media-list" aria-label="Available ISO images">
+        {{range .ISOs}}<li><code>{{.}}</code></li>{{end}}
+      </ul>
       {{else}}
-      <input class="field-input" name="iso" placeholder="filename.iso" disabled>
-      <span class="muted">No ISOs in library — copy files into <code>{{.MediaDir}}</code> or use a URL.</span>
+      <p class="muted">No ISOs yet — upload a file below or mount from a URL.</p>
       {{end}}
-    </label>
 
-    <label class="field url-only" hidden>
-      <span class="field-label">ISO URL</span>
-      <input class="field-input" type="url" name="url" placeholder="https://example.com/path/install.iso" inputmode="url">
-    </label>
+      <form class="media-upload"
+            hx-post="{{.HostBase}}/media/upload"
+            hx-target="#media-panel"
+            hx-swap="outerHTML"
+            hx-encoding="multipart/form-data">
+        <label class="field">
+          <span class="field-label">Upload ISO</span>
+          <input class="field-input" type="file" name="iso" accept=".iso,application/x-iso9660-image" required>
+        </label>
+        <label class="field-check">
+          <input type="checkbox" name="mount" value="1" checked>
+          Mount after upload
+        </label>
+        <button class="btn" type="submit">Upload</button>
+      </form>
+    </section>
 
-    <label class="field url-only" hidden>
-      <span class="field-label">Delivery</span>
-      <select class="field-input" name="delivery">
-        <option value="auto" selected>Auto — stream when supported, else cache</option>
-        <option value="stream">Stream — HTTP Range reads (no full download)</option>
-        <option value="cache">Cache — download and keep for reuse</option>
-      </select>
-      <span class="muted">Cached downloads stay on disk for {{.CacheTTL}} after unmount (remount same URL reuses cache).</span>
-    </label>
+    <section class="panel media-card">
+      <h2 class="subhead">Mount from library or URL</h2>
+      <form class="media-mount"
+            hx-post="{{.HostBase}}/media/mount"
+            hx-target="#media-panel"
+            hx-swap="outerHTML">
+        <fieldset class="field">
+          <legend class="field-label">Source</legend>
+          <div class="segmented">
+            <label><input type="radio" name="source" value="library" checked> Library</label>
+            <label><input type="radio" name="source" value="url"> URL</label>
+          </div>
+        </fieldset>
 
-    <button class="btn" type="submit">Mount as CD-ROM</button>
-  </form>
-  <script>
-  (function () {
-    var form = document.currentScript && document.currentScript.parentElement;
-    if (!form) return;
-    function sync() {
-      var src = form.querySelector('input[name=source]:checked');
-      var isURL = src && src.value === 'url';
-      form.querySelectorAll('.library-only').forEach(function (el) { el.hidden = isURL; });
-      form.querySelectorAll('.url-only').forEach(function (el) { el.hidden = !isURL; });
-      var iso = form.querySelector('[name=iso]');
-      var url = form.querySelector('[name=url]');
-      if (iso) iso.required = !isURL;
-      if (url) url.required = isURL;
-    }
-    form.querySelectorAll('input[name=source]').forEach(function (el) {
-      el.addEventListener('change', sync);
-    });
-    sync();
-  })();
-  </script>
+        <label class="field media-library-only">
+          <span class="field-label">ISO image</span>
+          {{if .ISOs}}
+          <select class="field-input" name="iso" required>
+            {{range .ISOs}}
+            <option value="{{.}}">{{.}}</option>
+            {{end}}
+          </select>
+          {{else}}
+          <select class="field-input" name="iso" disabled>
+            <option value="">Upload an ISO first</option>
+          </select>
+          {{end}}
+        </label>
+
+        <label class="field media-url-only" hidden>
+          <span class="field-label">ISO URL</span>
+          <input class="field-input" type="url" name="url" placeholder="https://example.com/install.iso" inputmode="url">
+        </label>
+
+        <label class="field media-url-only" hidden>
+          <span class="field-label">Delivery</span>
+          <select class="field-input" name="delivery">
+            <option value="auto" selected>Auto — stream when supported, else cache</option>
+            <option value="stream">Stream — HTTP Range (no full download)</option>
+            <option value="cache">Cache — download for local reuse</option>
+          </select>
+          <span class="field-help">Cached URLs are kept for {{.CacheTTL}} after unmount.</span>
+        </label>
+
+        <button class="btn primary" type="submit">Mount CD-ROM</button>
+      </form>
+    </section>
+  </div>
   {{end}}
 </div>
 {{end}}

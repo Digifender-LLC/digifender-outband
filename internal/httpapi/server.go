@@ -190,6 +190,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET "+p+"/media", s.handleMedia)
 	s.mux.HandleFunc("GET "+p+"/partials/media", s.handleMediaPartial)
 	s.mux.HandleFunc("POST "+p+"/media/mount", s.handleMediaMount)
+	s.mux.HandleFunc("POST "+p+"/media/upload", s.handleMediaUpload)
 	s.mux.HandleFunc("POST "+p+"/media/unmount", s.handleMediaUnmount)
 }
 
@@ -971,6 +972,65 @@ func (s *Server) handleMediaMount(w http.ResponseWriter, r *http.Request) {
 			d.Result = fmt.Sprintf("Mounted URL as virtual CD-ROM (%s)", req.Delivery)
 		default:
 			d.Result = fmt.Sprintf("Mounted %s as virtual CD-ROM", req.Library)
+		}
+	}
+	d.Status = mgr.Status()
+	d.ISOs, _ = mgr.ListISOs()
+	s.render(w, "partials/media_panel.html", d)
+}
+
+func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	mgr := s.mediaManager(h)
+	d := s.loadMediaPage(h)
+	if mgr == nil {
+		d.ErrMsg = "Virtual media not available"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	if d.Status.Mounted {
+		d.ErrMsg = "Unmount the current ISO before uploading"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, kvm.MaxUploadBytes+32<<20)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		d.ErrMsg = "Upload too large or invalid form"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	file, hdr, err := r.FormFile("iso")
+	if err != nil {
+		d.ErrMsg = "Choose an ISO file to upload"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	defer file.Close()
+
+	name, err := kvm.SaveUpload(mgr.MediaDir(), file, hdr.Filename, kvm.MaxUploadBytes)
+	if err != nil {
+		d.ErrMsg = err.Error()
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	d.Result = fmt.Sprintf("Uploaded %s to library", name)
+	if r.FormValue("mount") == "1" {
+		req := kvm.MountRequest{Source: kvm.MountSourceLibrary, Library: name}
+		if err := mgr.MountRequest(r.Context(), req); err != nil {
+			if errors.Is(err, kvm.ErrMediaBusy) {
+				d.ErrMsg = "Uploaded, but another ISO is already mounted"
+			} else {
+				d.ErrMsg = fmt.Sprintf("Uploaded %s, but mount failed: %v", name, err)
+			}
+		} else {
+			d.Result = fmt.Sprintf("Uploaded and mounted %s", name)
 		}
 	}
 	d.Status = mgr.Status()

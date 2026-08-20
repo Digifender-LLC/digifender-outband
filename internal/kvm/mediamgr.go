@@ -301,12 +301,15 @@ func (m *MediaManager) Unmount() {
 	}
 }
 
-// EnsureMediaDir creates the ISO library directory if missing.
+// EnsureMediaDir creates the ISO library and URL cache directories if missing.
 func EnsureMediaDir(dir string) error {
 	if dir == "" {
 		return nil
 	}
-	return os.MkdirAll(dir, 0o755)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.MkdirAll(filepath.Join(dir, ".cache"), 0o755)
 }
 
 // IsNotExist reports whether err is a missing media directory entry.

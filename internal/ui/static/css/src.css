@@ -310,6 +310,63 @@
     @apply m-0 w-full text-xs font-semibold uppercase tracking-wide text-muted;
   }
 
+  /* —— Forms —— */
+  .field {
+    @apply mb-3 block;
+  }
+  .field-label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+  .field-help {
+    @apply mt-1 block text-xs text-muted;
+  }
+  .field-input {
+    @apply w-full rounded-sm border border-border bg-surface-2 px-2.5 py-2 font-sans text-sm text-fg;
+  }
+  .field-input:disabled {
+    @apply cursor-not-allowed opacity-60;
+  }
+  .field-check {
+    @apply mb-3 flex items-center gap-2 text-sm text-muted;
+  }
+  .segmented {
+    @apply flex flex-wrap gap-2;
+  }
+  .segmented label {
+    @apply m-0 inline-flex cursor-pointer items-center gap-1.5 rounded-sm border border-border bg-surface-2 px-3 py-1.5 text-sm;
+  }
+  .segmented input {
+    @apply m-0;
+  }
+
+  /* —— Virtual media —— */
+  .media-panel .media-status {
+    @apply mb-4;
+  }
+  .media-grid > .media-card {
+    @apply m-0;
+  }
+  .media-hint {
+    @apply mb-3 text-sm;
+  }
+  .media-list {
+    @apply mb-4 max-h-40 list-none overflow-y-auto rounded-sm border border-border bg-surface-2 p-0;
+  }
+  .media-list li {
+    @apply border-b border-border px-3 py-2 font-mono text-xs last:border-b-0;
+  }
+  .media-fact-wide {
+    @apply col-span-full;
+  }
+  .media-url {
+    @apply break-all text-xs;
+  }
+  .media-actions,
+  .media-upload,
+  .media-mount {
+    @apply mt-2;
+  }
+
   /* —— Badges / alerts —— */
   .badge {
     @apply inline-block whitespace-nowrap rounded-sm border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[0.72rem] font-medium tracking-wide text-muted;
