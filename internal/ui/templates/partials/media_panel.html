@@ -25,6 +25,10 @@
         <dd class="media-url">{{.Status.URL}}</dd>
       </div>
       {{end}}
+      <div>
+        <dt>Host reads</dt>
+        <dd>{{if gt .Status.BytesServed 0}}{{formatBytes .Status.BytesServed}} from ISO{{else}}none yet{{end}}</dd>
+      </div>
     </dl>
     {{else if .Activity.Active}}
     <p class="subhead">{{if eq .Activity.Phase "mounting"}}Mounting virtual CD-ROM{{else if eq .Activity.Phase "uploading"}}Uploading ISO{{else}}Downloading ISO{{end}}</p>
@@ -72,11 +76,13 @@
           hx-target="#media-panel"
           hx-swap="outerHTML">
       <p class="field-label">Boot from virtual CD (IPMI)</p>
-      <button class="btn primary" name="action" value="boot_power" type="submit">Boot from CD now</button>
+      <button class="btn primary" name="action" value="cold_boot" type="submit">Cold boot from CD</button>
+      <button class="btn" name="action" value="boot_power" type="submit">Boot from CD now</button>
       <button class="btn" name="action" value="boot_once" type="submit">Set next boot to CD</button>
       <button class="btn" name="action" value="clear_boot" type="submit">Clear boot override</button>
     </form>
     {{end}}
+    <p class="field-help">AMI virtual CD often does not appear in the BIOS boot-order list. Use <strong>Cold boot from CD</strong> (power off → mount → boot override → power on) or the boot buttons above. <strong>Host reads</strong> shows whether the platform is actually reading the ISO during POST.</p>
     <p class="field-help"><a href="{{.HostBase}}/kvm">Open KVM</a> to watch the boot process.</p>
   </div>
   {{else if not .Activity.Active}}

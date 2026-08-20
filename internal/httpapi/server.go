@@ -920,7 +920,7 @@ func (s *Server) loadMediaPage(h *hosts.Host) mediaPageData {
 		d.ErrMsg = act.Err
 		_ = mgr.TakeActivityError()
 	}
-	d.PollMedia = act.Active
+	d.PollMedia = act.Active || d.Status.Mounted
 	lib, err := mgr.ListLibrary()
 	if err != nil {
 		if d.ErrMsg == "" {
@@ -1156,13 +1156,13 @@ func (s *Server) handleMediaBoot(w http.ResponseWriter, r *http.Request) {
 	var result, errMsg string
 	switch action {
 	case "boot_once":
-		if err := ipmiClient.SetBootCDROMOnce(ctx); err != nil {
+		if err := setBootCDROMBestEffort(ctx, ipmiClient); err != nil {
 			errMsg = err.Error()
 		} else {
-			result = "Next boot will use CD-ROM once"
+			result = "Next boot will use CD-ROM once (UEFI preferred)"
 		}
 	case "boot_power":
-		if err := ipmiClient.SetBootCDROMOnce(ctx); err != nil {
+		if err := setBootCDROMBestEffort(ctx, ipmiClient); err != nil {
 			errMsg = err.Error()
 			break
 		}
@@ -1178,7 +1178,45 @@ func (s *Server) handleMediaBoot(w http.ResponseWriter, r *http.Request) {
 		if err := h.Client.PowerControl(ctx, power); err != nil {
 			errMsg = err.Error()
 		} else {
-			result = "Boot override set and host power cycled"
+			result = "Boot override set and host power cycled — open KVM to confirm boot"
+		}
+	case "cold_boot":
+		if !d.Status.Mounted {
+			errMsg = "Mount an ISO before cold boot"
+			break
+		}
+		ps, err := h.Client.PowerStatus(ctx)
+		if err != nil {
+			errMsg = err.Error()
+			break
+		}
+		if ps.IsOn {
+			if err := h.Client.PowerControl(ctx, bmc.PowerOff); err != nil {
+				errMsg = err.Error()
+				break
+			}
+			select {
+			case <-ctx.Done():
+				errMsg = ctx.Err().Error()
+			case <-time.After(5 * time.Second):
+			}
+		}
+		if err := setBootCDROMBestEffort(ctx, ipmiClient); err != nil {
+			errMsg = err.Error()
+			break
+		}
+		select {
+		case <-ctx.Done():
+			errMsg = ctx.Err().Error()
+		case <-time.After(2 * time.Second):
+		}
+		if errMsg != "" {
+			break
+		}
+		if err := h.Client.PowerControl(ctx, bmc.PowerOn); err != nil {
+			errMsg = err.Error()
+		} else {
+			result = "Cold boot started with CD-ROM override — watch KVM during POST"
 		}
 	case "clear_boot":
 		if err := ipmiClient.ClearBootOverride(ctx); err != nil {
@@ -1197,6 +1235,13 @@ func (s *Server) handleMediaBoot(w http.ResponseWriter, r *http.Request) {
 		d.Result = result
 	}
 	s.render(w, "partials/media_panel.html", d)
+}
+
+func setBootCDROMBestEffort(ctx context.Context, c *ipmi.Adapter) error {
+	if err := c.SetBootCDROMOnceEFI(ctx); err == nil {
+		return nil
+	}
+	return c.SetBootCDROMOnce(ctx)
 }
 
 func (s *Server) handleMediaDelete(w http.ResponseWriter, r *http.Request) {

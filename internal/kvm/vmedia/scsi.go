@@ -271,33 +271,88 @@ func (c *Device) inquiry(alloc int) []byte {
 	return clip(b, alloc)
 }
 
-// readTOC returns a minimal single-data-track TOC (formatted, MSF=0).
+// readTOC returns MMC READ TOC data for format 0/1/2.
 func (c *Device) readTOC(cdb []byte) []byte {
-	// TOC response: 2-byte data length + first/last track, then track descriptors.
-	// One data track (track 1) plus the lead-out (0xAA).
-	track := func(no byte, lba uint32) []byte {
-		d := make([]byte, 8)
-		d[1] = 0x14 // ADR/control: data track
-		d[2] = no
-		binary.BigEndian.PutUint32(d[4:8], lba)
-		return d
+	format := byte(0)
+	if len(cdb) > 2 {
+		format = cdb[2] & 0x0F
 	}
-	body := append(track(1, 0), track(0xAA, c.lastLBA+1)...)
+	switch format {
+	case 1:
+		return clip(c.readTOCSession(), allocLen(cdb, 6, 2))
+	case 2:
+		return clip(c.readTOCFull(), allocLen(cdb, 6, 2))
+	default:
+		return clip(c.readTOCFormat0(), allocLen(cdb, 6, 2))
+	}
+}
+
+// lbaToMSF converts a 2048-byte CD LBA to MSF (75 frames/sec).
+func lbaToMSF(lba uint32) (min, sec, frame byte) {
+	abs := int(lba) + 150
+	frame = byte(abs % 75)
+	abs /= 75
+	sec = byte(abs % 60)
+	min = byte(abs / 60)
+	return min, sec, frame
+}
+
+func tocPoint(adrControl, track, point, b4, b5, b6, b7 byte) []byte {
+	d := make([]byte, 8)
+	d[1] = adrControl
+	d[2] = track
+	d[3] = point
+	d[4], d[5], d[6], d[7] = b4, b5, b6, b7
+	return d
+}
+
+func (c *Device) readTOCFormat0() []byte {
+	tm, ts, tf := lbaToMSF(0)
+	lm, ls, lf := lbaToMSF(c.lastLBA + 1)
+	body := tocPoint(0x14, 0, 0xA0, 0, 0, 0, 1)
+	body = append(body, tocPoint(0x14, 0, 0xA1, 0, 0, 0, 1)...)
+	body = append(body, tocPoint(0x14, 0, 0xA2, lm, ls, lf, 0)...)
+	body = append(body, tocPoint(0x14, 1, 0x01, tm, ts, tf, 0)...)
 	out := make([]byte, 4+len(body))
 	binary.BigEndian.PutUint16(out[0:2], uint16(len(body)+2))
-	out[2] = 1 // first track
-	out[3] = 1 // last track
+	out[2] = 1
+	out[3] = 1
 	copy(out[4:], body)
 	return out
 }
 
-// getConfiguration returns a minimal GET CONFIGURATION feature header advertising
-// a CD-ROM profile.
+func (c *Device) readTOCSession() []byte {
+	tm, ts, tf := lbaToMSF(0)
+	out := make([]byte, 8)
+	binary.BigEndian.PutUint16(out[0:2], 6)
+	out[2], out[3], out[4] = tm, ts, tf
+	out[5] = 1 // first track in session
+	out[6] = 1 // last track in session
+	return out
+}
+
+func (c *Device) readTOCFull() []byte {
+	tm, ts, tf := lbaToMSF(0)
+	lm, ls, lf := lbaToMSF(c.lastLBA + 1)
+	body := tocPoint(0x14, 0, 0xA0, 0, 0, 0, 1)
+	body = append(body, tocPoint(0x14, 0, 0xA1, 0, 0, 0, 1)...)
+	body = append(body, tocPoint(0x14, 0, 0xA2, lm, ls, lf, 0)...)
+	body = append(body, tocPoint(0x14, 1, 0x01, tm, ts, tf, 0)...)
+	out := make([]byte, 4+len(body))
+	binary.BigEndian.PutUint16(out[0:2], uint16(len(body)+2))
+	out[2] = 1 // first session
+	out[3] = 1 // last session
+	copy(out[4:], body)
+	return out
+}
+
+// getConfiguration returns GET CONFIGURATION data advertising a CD-ROM profile.
 func (c *Device) getConfiguration() []byte {
-	out := make([]byte, 12)
-	// Feature header: data length (4) + reserved (2) + current profile (2).
-	binary.BigEndian.PutUint32(out[0:4], uint32(len(out)-4))
-	binary.BigEndian.PutUint16(out[6:8], 0x0008) // current profile: CD-ROM
+	out := make([]byte, 16)
+	binary.BigEndian.PutUint32(out[0:4], 12)
+	binary.BigEndian.PutUint16(out[6:8], 0x0008)
+	binary.BigEndian.PutUint16(out[8:10], 0x0008) // CD-ROM profile feature
+	out[11] = 0x03                                // current + persistent
 	return out
 }
 

@@ -39,10 +39,11 @@ func buildCDEmulator(backing vmedia.Reader) (*vmedia.Device, *vmedia.Cache) {
 
 // attachVMedia opens the device's vmedia port using a web session token and runs the
 // SCSI emulation loop against backing until ctx is cancelled.
-func attachVMedia(ctx context.Context, host string, kind string, token string, args map[string]string, backing vmedia.Reader) (func(), error) {
+// stats reports bytes served to the host (READ data); nil when attach fails.
+func attachVMedia(ctx context.Context, host string, kind string, token string, args map[string]string, backing vmedia.Reader) (stop func(), stats func() int64, err error) {
 	port, err := vmediaPort(kind, args)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sess, err := vmedia.Connect(ctx, vmedia.Options{
 		Host:       host,
@@ -52,7 +53,7 @@ func attachVMedia(ctx context.Context, host string, kind string, token string, a
 		TLS:        args["vmsecure"] == "1",
 	}, token)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	emu, cache := buildCDEmulator(backing)
@@ -63,7 +64,7 @@ func attachVMedia(ctx context.Context, host string, kind string, token string, a
 		}
 	}()
 
-	stop := func() {
+	stop = func() {
 		mcancel()
 		_ = sess.Close()
 		if cache != nil {
@@ -73,6 +74,8 @@ func attachVMedia(ctx context.Context, host string, kind string, token string, a
 					kind, s.Hits, s.Misses, 100*float64(s.Hits)/float64(total), s.FetchedBytes/1024)
 			}
 		}
+		log.Printf("vmedia: %s served %d bytes to host", kind, emu.BytesServed())
 	}
-	return stop, nil
+	statsFn := func() int64 { return emu.BytesServed() }
+	return stop, statsFn, nil
 }

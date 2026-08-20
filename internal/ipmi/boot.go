@@ -7,8 +7,17 @@ import (
 	goipmi "github.com/bougou/go-ipmi"
 )
 
-// SetBootCDROMOnce sets a one-time force CD-ROM boot override via IPMI boot flags.
+// SetBootCDROMOnce sets a one-time force CD-ROM boot override (legacy BIOS).
 func (a *Adapter) SetBootCDROMOnce(ctx context.Context) error {
+	return a.setBootCDROMOnce(ctx, goipmi.BIOSBootTypeLegacy)
+}
+
+// SetBootCDROMOnceEFI sets a one-time force CD-ROM boot override (UEFI).
+func (a *Adapter) SetBootCDROMOnceEFI(ctx context.Context) error {
+	return a.setBootCDROMOnce(ctx, goipmi.BIOSBootTypeEFI)
+}
+
+func (a *Adapter) setBootCDROMOnce(ctx context.Context, bootType goipmi.BIOSBootType) error {
 	c, err := a.ensureClient(ctx)
 	if err != nil {
 		return err
@@ -16,7 +25,7 @@ func (a *Adapter) SetBootCDROMOnce(ctx context.Context) error {
 	flags := &goipmi.BootOptionParam_BootFlags{
 		BootFlagsValid:     true,
 		Persist:            false,
-		BIOSBootType:       goipmi.BIOSBootTypeLegacy,
+		BIOSBootType:       bootType,
 		BootDeviceSelector: goipmi.BootDeviceSelectorForceCDROM,
 	}
 	if err := c.SetBootParamBootFlags(ctx, flags); err != nil {

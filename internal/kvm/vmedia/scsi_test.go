@@ -136,6 +136,44 @@ func TestReadOnlyDiskWriteProtect(t *testing.T) {
 	}
 }
 
+func TestReadTOCFormat0MSF(t *testing.T) {
+	cd := NewCDROM(patReader{size: 100 * cdBlockSize})
+	toc := cd.readTOCFormat0()
+	if got := binary.BigEndian.Uint16(toc[0:2]); got != 34 {
+		t.Fatalf("TOC data length = %d, want 34", got)
+	}
+	if toc[2] != 1 || toc[3] != 1 {
+		t.Fatalf("first/last track = %d/%d, want 1/1", toc[2], toc[3])
+	}
+	// Track 1 descriptor: point 0x01, MSF of LBA 0 = 00:02:00
+	track1 := toc[4+8*3 : 4+8*4]
+	if track1[3] != 0x01 {
+		t.Fatalf("track point = 0x%02X, want 0x01", track1[3])
+	}
+	if track1[4] != 0 || track1[5] != 2 || track1[6] != 0 {
+		t.Errorf("track 1 MSF = %02X:%02X:%02X, want 00:02:00", track1[4], track1[5], track1[6])
+	}
+	// Lead-out point 0xA2 should use MSF, not raw LBA bytes in the address field.
+	a2 := toc[4+8*2 : 4+8*3]
+	if a2[3] != 0xA2 {
+		t.Fatalf("A2 point = 0x%02X", a2[3])
+	}
+	if a2[4] == 0 && a2[5] == 0 && a2[6] == 0 && a2[7] == 0 {
+		t.Error("lead-out MSF looks like raw LBA zero")
+	}
+}
+
+func TestReadTOCSession(t *testing.T) {
+	cd := NewCDROM(patReader{size: 10 * cdBlockSize})
+	sess := cd.readTOCSession()
+	if binary.BigEndian.Uint16(sess[0:2]) != 6 {
+		t.Fatalf("session data length = %d, want 6", binary.BigEndian.Uint16(sess[0:2]))
+	}
+	if sess[2] != 0 || sess[3] != 2 || sess[4] != 0 {
+		t.Errorf("session start MSF = %02X:%02X:%02X, want 00:02:00", sess[2], sess[3], sess[4])
+	}
+}
+
 func TestReadCapacity(t *testing.T) {
 	cd := NewCDROM(patReader{size: 25 * cdBlockSize}) // 25 blocks → last LBA 24
 	cap := cd.readCapacity()

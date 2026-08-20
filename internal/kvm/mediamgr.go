@@ -22,13 +22,14 @@ var ErrMediaBusy = errors.New("virtual media already mounted")
 
 // MediaStatus describes the current CD redirection state.
 type MediaStatus struct {
-	Mounted  bool
-	ISO      string // display label (basename or URL tail)
-	Size     int64
-	Source   string // library | url-stream | url-cache
-	URL      string // set for URL mounts
-	Delivery string // auto | stream | cache
-	Err      string
+	Mounted     bool
+	ISO         string // display label (basename or URL tail)
+	Size        int64
+	BytesServed int64 // READ data sent to host since mount
+	Source      string // library | url-stream | url-cache
+	URL         string // set for URL mounts
+	Delivery    string // auto | stream | cache
+	Err         string
 }
 
 type mediaBacking interface {
@@ -47,6 +48,7 @@ type MediaManager struct {
 
 	mu          sync.Mutex
 	stop        func()
+	statsFn     func() int64
 	status      MediaStatus
 	activity    MediaActivity
 	mountCancel context.CancelFunc
@@ -75,7 +77,11 @@ func (m *MediaManager) MediaDir() string { return m.mediaDir }
 func (m *MediaManager) Status() MediaStatus {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.status
+	st := m.status
+	if st.Mounted && m.statsFn != nil {
+		st.BytesServed = m.statsFn()
+	}
+	return st
 }
 
 // Activity returns background download/mount progress, if any.
@@ -419,7 +425,7 @@ func (m *MediaManager) mountBacking(ctx context.Context, backing mediaBacking, l
 		return fmt.Errorf("media: no kvmtoken in jnlp")
 	}
 
-	stop, err := attachVMedia(ctx, m.host, "cd", token, args, backing)
+	stop, statsFn, err := attachVMedia(ctx, m.host, "cd", token, args, backing)
 	if err != nil {
 		Logout(m.host, cookie)
 		backing.Close()
@@ -430,6 +436,7 @@ func (m *MediaManager) mountBacking(ctx context.Context, backing mediaBacking, l
 	}
 
 	m.mu.Lock()
+	m.statsFn = statsFn
 	m.stop = func() {
 		stop()
 		_ = backing.Close()
@@ -527,6 +534,7 @@ func (m *MediaManager) Unmount() {
 	cancel := m.mountCancel
 	stop := m.stop
 	m.stop = nil
+	m.statsFn = nil
 	m.status = MediaStatus{}
 	m.activity = MediaActivity{}
 	m.mountCancel = nil
