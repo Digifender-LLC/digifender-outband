@@ -25,6 +25,7 @@
   kvm:
     port: 7578
     tls: false
+    # media_dir: ./media   # optional; defaults to OUTBAND_MEDIA_DIR (./media)
   sensor_names:
     CPU DTS value: CPU temperature
     CPU below tmax: CPU below Tmax

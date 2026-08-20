@@ -33,6 +33,7 @@
     {{if .ShowSEL}}<a href="{{.HostBase}}/sel" {{if eq .Active "sel"}}aria-current="page"{{end}}>SEL</a>{{end}}
     {{if .ShowConsole}}<a href="{{.HostBase}}/console" {{if eq .Active "console"}}aria-current="page"{{end}}>Console</a>{{end}}
     {{if .ShowKVM}}<a href="{{.HostBase}}/kvm" {{if eq .Active "kvm"}}aria-current="page"{{end}}>KVM</a>{{end}}
+    {{if .ShowMedia}}<a href="{{.HostBase}}/media" {{if eq .Active "media"}}aria-current="page"{{end}}>Media</a>{{end}}
   </nav>
   <div class="sidebar-footer">
     <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false" aria-label="Switch theme" title="Switch theme">

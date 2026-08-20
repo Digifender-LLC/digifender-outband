@@ -35,7 +35,7 @@ func TestOpenSkipsUnimplemented(t *testing.T) {
 		{ID: "dell", Provider: "unimplemented", Host: "10.0.0.1", Password: "x"},
 		{ID: "ok", Provider: "testok", Host: "10.0.0.2", Password: "x"},
 	}
-	r, err := Open(cfgs, "ok", discardLog())
+	r, err := Open(cfgs, "ok", "", discardLog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestOpenAllUnimplemented(t *testing.T) {
 		{ID: "a", Provider: "unimplemented", Host: "10.0.0.1", Password: "x"},
 		{ID: "b", Provider: "unimplemented", Host: "10.0.0.2", Password: "x"},
 	}
-	_, err := Open(cfgs, "", discardLog())
+	_, err := Open(cfgs, "", "", discardLog())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -64,7 +64,7 @@ func TestOpenDefaultSkipped(t *testing.T) {
 		{ID: "dell", Provider: "unimplemented", Host: "10.0.0.1", Password: "x"},
 		{ID: "ok", Provider: "testok", Host: "10.0.0.2", Password: "x"},
 	}
-	_, err := Open(cfgs, "dell", discardLog())
+	_, err := Open(cfgs, "dell", "", discardLog())
 	if err == nil {
 		t.Fatal("expected error when default is unimplemented")
 	}
@@ -82,7 +82,7 @@ func TestRenameSensor(t *testing.T) {
 			},
 		},
 	}
-	r, err := Open(cfgs, "ok", discardLog())
+	r, err := Open(cfgs, "ok", "", discardLog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestFeaturesDisableSensors(t *testing.T) {
 		},
 	}
 	// testok has no Capabilities → control-plane defaults include sensors.
-	r, err := Open(cfgs, "ok", discardLog())
+	r, err := Open(cfgs, "ok", "", discardLog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestOpenUnknownProvider(t *testing.T) {
 	cfgs := []config.HostConfig{
 		{ID: "x", Provider: "nope", Host: "10.0.0.1", Password: "x"},
 	}
-	_, err := Open(cfgs, "", discardLog())
+	_, err := Open(cfgs, "", "", discardLog())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -137,7 +137,7 @@ func TestOpenEmptyDefaultUsesFirstUsable(t *testing.T) {
 		{ID: "dell", Provider: "unimplemented", Host: "10.0.0.1", Password: "x"},
 		{ID: "ok", Provider: "testok", Host: "10.0.0.2", Password: "x"},
 	}
-	r, err := Open(cfgs, "", discardLog())
+	r, err := Open(cfgs, "", "", discardLog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestOpenKVMFlags(t *testing.T) {
 			AMT: &config.AMTOptions{KVM: &config.AMTKVMOptions{}},
 		},
 	}
-	r, err := Open(cfgs, "ami", discardLog())
+	r, err := Open(cfgs, "ami", "", discardLog())
 	if err != nil {
 		t.Fatal(err)
 	}

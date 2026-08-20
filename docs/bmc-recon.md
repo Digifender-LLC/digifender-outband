@@ -7,7 +7,7 @@ Target used during Outband development.
 | Host | `192.168.9.74` |
 | Vendor | Tyan S5512 (IANA manufacturer ID 6653), AMI MegaRAC / GoAhead |
 | Firmware | S5512 R5.00 (2013-09-16) |
-| Creds (dev) | Factory AMI default is often `root` / device-specific — **env only; never commit** |
+| Creds (dev) | TYAN S5512 factory default: `root` / `superuser` (lower-case; see board manual). Dev lab may use a changed password — **env only; never commit** |
 | IPMI | UDP 623, IPMI 2.0 / RMCP+ |
 | SOL | Enabled @ 38.4 kbps (payload on UDP 623) |
 | Web UI | HTTP 80 (legacy TLS on 443) |
@@ -26,6 +26,10 @@ Target used during Outband development.
 - JNLP: `/Java/jviewer.jnlp?EXTRNIP=…&JNLPSTR=JViewer` (positional args; this firmware keeps a trailing `0x02` on the session secret).
 - Outband bridges IVTP video/HID to noVNC via RFB (`/kvm`, `/ws/kvm`).
 - Full wire notes: [kvm-protocol.md](kvm-protocol.md).
+
+## Virtual media (ISO)
+
+AMI MegaRAC exposes CD-ROM redirection on TCP **5120** (plaintext on the Tyan S5512; `vmsecure=0` in jnlp). Outband serves ISO files from `OUTBAND_MEDIA_DIR` (default `./media`) over the IUSB/SCSI data plane (`internal/kvm/vmedia`). Remote `http(s)` URLs can **stream** via HTTP Range when supported, or **cache** under `media/.cache/` (retained `OUTBAND_MEDIA_CACHE_TTL`, default 1h after unmount). Web UI: `/h/{id}/media`.
 
 ## Out of scope (current)
 

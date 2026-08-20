@@ -37,6 +37,9 @@ type Server struct {
 	registry  *hosts.Registry
 	defaultID string
 	kvms      map[string]kvmBridge
+	medias    map[string]*kvm.MediaManager
+	mediaDir  string
+	mediaCacheTTL time.Duration
 	gate      *Gate
 	oidc      *oidcAuth
 	store     *telemetry.Store
@@ -48,7 +51,7 @@ type Server struct {
 
 // New builds routes and templates bound to the host registry.
 // oidcCfg may be zero; when enabled, discovery runs during construction.
-func New(registry *hosts.Registry, gate *Gate, store *telemetry.Store, log *slog.Logger, oidcCfg config.OIDCConfig) (*Server, error) {
+func New(registry *hosts.Registry, gate *Gate, store *telemetry.Store, log *slog.Logger, oidcCfg config.OIDCConfig, globalMediaDir string, mediaCacheTTL time.Duration) (*Server, error) {
 	if registry == nil || len(registry.All()) == 0 {
 		return nil, fmt.Errorf("httpapi: empty host registry")
 	}
@@ -60,6 +63,7 @@ func New(registry *hosts.Registry, gate *Gate, store *telemetry.Store, log *slog
 		return nil, err
 	}
 	kvms := make(map[string]kvmBridge)
+	medias := make(map[string]*kvm.MediaManager)
 	for _, h := range registry.All() {
 		switch {
 		case h.HasAMTKVM():
@@ -71,6 +75,9 @@ func New(registry *hosts.Registry, gate *Gate, store *telemetry.Store, log *slog
 		case h.HasILOKVM():
 			kvms[h.ID] = rc.NewBridge(h.Address, h.Port, h.User, h.Password, h.ILOInsecureSkipVerify(), log)
 		}
+		if h.HasAMIMedia() {
+			medias[h.ID] = kvm.NewMediaManager(h.Address, h.User, h.Password, h.MediaDir(), mediaCacheTTL, log)
+		}
 	}
 	oa, err := newOIDCAuth(context.Background(), oidcCfg)
 	if err != nil {
@@ -80,6 +87,9 @@ func New(registry *hosts.Registry, gate *Gate, store *telemetry.Store, log *slog
 		registry:  registry,
 		defaultID: registry.DefaultID(),
 		kvms:      kvms,
+		medias:    medias,
+		mediaDir:  globalMediaDir,
+		mediaCacheTTL: mediaCacheTTL,
 		gate:      gate,
 		oidc:      oa,
 		store:     store,
@@ -146,6 +156,7 @@ func (s *Server) routes() {
 		"/metrics", "/api/metrics",
 		"/partials/dashboard",
 		"/console", "/kvm",
+		"/media", "/partials/media",
 		"/ws/sol", "/ws/kvm",
 	} {
 		s.mux.HandleFunc("GET "+suffix, s.redirectDefault(suffix))
@@ -175,6 +186,11 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("GET "+p+"/kvm", s.handleKVM)
 	s.mux.HandleFunc("GET "+p+"/ws/kvm", s.handleKVMWS)
+
+	s.mux.HandleFunc("GET "+p+"/media", s.handleMedia)
+	s.mux.HandleFunc("GET "+p+"/partials/media", s.handleMediaPartial)
+	s.mux.HandleFunc("POST "+p+"/media/mount", s.handleMediaMount)
+	s.mux.HandleFunc("POST "+p+"/media/unmount", s.handleMediaUnmount)
 }
 
 func (s *Server) redirectDefault(suffix string) http.HandlerFunc {
@@ -214,6 +230,7 @@ type pageData struct {
 	ShowSEL         bool
 	ShowConsole     bool
 	ShowKVM         bool
+	ShowMedia       bool
 }
 
 func (s *Server) page(h *hosts.Host, title, active string) pageData {
@@ -240,6 +257,7 @@ func (s *Server) page(h *hosts.Host, title, active string) pageData {
 		ShowSEL:         features.Has(bmc.FeatureSEL),
 		ShowConsole:     features.Has(bmc.FeatureConsole),
 		ShowKVM:         features.Has(bmc.FeatureKVM),
+		ShowMedia:       features.Has(bmc.FeatureMedia),
 	}
 }
 
@@ -856,4 +874,139 @@ func (s *Server) handleSOLWS(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	<-errCh
+}
+
+type mediaPageData struct {
+	pageData
+	MediaDir  string
+	CacheTTL  string
+	ISOs      []string
+	Status    kvm.MediaStatus
+	ErrMsg    string
+	Result    string
+}
+
+func (s *Server) mediaManager(h *hosts.Host) *kvm.MediaManager {
+	if h == nil {
+		return nil
+	}
+	return s.medias[h.ID]
+}
+
+func (s *Server) loadMediaPage(h *hosts.Host) mediaPageData {
+	d := mediaPageData{pageData: s.page(h, "Virtual media", "media")}
+	mgr := s.mediaManager(h)
+	if mgr == nil {
+		d.ErrMsg = "Virtual media not configured for this host"
+		return d
+	}
+	d.MediaDir = mgr.MediaDir()
+	d.CacheTTL = formatMediaCacheTTL(s.mediaCacheTTL)
+	d.Status = mgr.Status()
+	isos, err := mgr.ListISOs()
+	if err != nil {
+		d.ErrMsg = err.Error()
+	} else {
+		d.ISOs = isos
+	}
+	return d
+}
+
+func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	s.render(w, "media.html", s.loadMediaPage(h))
+}
+
+func (s *Server) handleMediaPartial(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	s.render(w, "partials/media_panel.html", s.loadMediaPage(h))
+}
+
+func (s *Server) handleMediaMount(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	mgr := s.mediaManager(h)
+	d := s.loadMediaPage(h)
+	if mgr == nil {
+		d.ErrMsg = "Virtual media not available"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	req, err := kvm.ParseMountRequest(r.FormValue("source"), r.FormValue("iso"), r.FormValue("url"), r.FormValue("delivery"))
+	if err != nil {
+		d.ErrMsg = err.Error()
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	if err := mgr.MountRequest(r.Context(), req); err != nil {
+		if errors.Is(err, kvm.ErrMediaBusy) {
+			d.ErrMsg = "Another ISO is already mounted — unmount first"
+		} else {
+			d.ErrMsg = err.Error()
+		}
+	} else {
+		switch req.Source {
+		case kvm.MountSourceURL:
+			d.Result = fmt.Sprintf("Mounted URL as virtual CD-ROM (%s)", req.Delivery)
+		default:
+			d.Result = fmt.Sprintf("Mounted %s as virtual CD-ROM", req.Library)
+		}
+	}
+	d.Status = mgr.Status()
+	d.ISOs, _ = mgr.ListISOs()
+	s.render(w, "partials/media_panel.html", d)
+}
+
+func formatMediaCacheTTL(d time.Duration) string {
+	if d <= 0 {
+		d = time.Hour
+	}
+	if d%time.Hour == 0 {
+		h := int(d / time.Hour)
+		if h == 1 {
+			return "1 hour"
+		}
+		return fmt.Sprintf("%d hours", h)
+	}
+	return d.Round(time.Minute).String()
+}
+
+func (s *Server) handleMediaUnmount(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	mgr := s.mediaManager(h)
+	d := s.loadMediaPage(h)
+	if mgr != nil {
+		mgr.Unmount()
+		d.Result = "Virtual CD-ROM disconnected"
+		d.Status = mgr.Status()
+		d.ISOs, _ = mgr.ListISOs()
+	}
+	s.render(w, "partials/media_panel.html", d)
 }

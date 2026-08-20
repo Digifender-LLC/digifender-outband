@@ -3,6 +3,7 @@ package ui
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
@@ -30,6 +31,18 @@ func ParseTemplates() (*template.Template, error) {
 				return "ON"
 			}
 			return "OFF"
+		},
+		"formatBytes": func(n int64) string {
+			if n < 1024 {
+				return fmt.Sprintf("%d B", n)
+			}
+			if n < 1024*1024 {
+				return fmt.Sprintf("%.1f KiB", float64(n)/1024)
+			}
+			if n < 1024*1024*1024 {
+				return fmt.Sprintf("%.1f MiB", float64(n)/(1024*1024))
+			}
+			return fmt.Sprintf("%.2f GiB", float64(n)/(1024*1024*1024))
 		},
 		"lower": strings.ToLower,
 	}

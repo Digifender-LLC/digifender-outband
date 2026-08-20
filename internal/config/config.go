@@ -22,6 +22,8 @@ type IPMIOptions struct {
 type KVMOptions struct {
 	Port int  `json:"port,omitempty" yaml:"port,omitempty"` // 0 → default 7578 when block present
 	TLS  bool `json:"tls,omitempty" yaml:"tls,omitempty"`
+	// MediaDir overrides the global ISO library for this host (OUTBAND_MEDIA_DIR).
+	MediaDir string `json:"media_dir,omitempty" yaml:"media_dir,omitempty"`
 }
 
 // AMTOptions holds Intel AMT WS-MAN settings.
@@ -246,6 +248,14 @@ func (h HostConfig) KVMEndpoint() (port int, tls bool) {
 	return port, h.KVM.TLS
 }
 
+// MediaDir returns the ISO library path for this host, preferring kvm.media_dir.
+func (h HostConfig) MediaDir(global string) string {
+	if h.KVM != nil && strings.TrimSpace(h.KVM.MediaDir) != "" {
+		return h.KVM.MediaDir
+	}
+	return global
+}
+
 // AMTKVMEndpoint returns the AMT redirection port and TLS flag.
 // Only meaningful when HasAMTKVM() is true. Port 0 → 16994 (or 16995 when TLS).
 // When Port is 0 and kvm.tls is false, TLS follows amt.tls.
@@ -326,6 +336,11 @@ type Config struct {
 	// Global KVM defaults applied to legacy single-host inventory.
 	KVMPort int
 	KVMTLS  bool
+
+	// MediaDir is the server-side ISO library for AMI virtual media (OUTBAND_MEDIA_DIR).
+	MediaDir string
+	// MediaCacheTTL is how long URL-downloaded ISOs stay on disk after unmount (OUTBAND_MEDIA_CACHE_TTL).
+	MediaCacheTTL time.Duration
 }
 
 // Load parses flags (env as defaults) and validates required fields.
@@ -347,6 +362,8 @@ func Load(args []string) (*Config, error) {
 		RetentionDays: envInt("OUTBAND_RETENTION_DAYS", 7),
 		KVMPort:       envInt("OUTBAND_KVM_PORT", 7578),
 		KVMTLS:        envBool("OUTBAND_KVM_TLS", false),
+		MediaDir:      envOr("OUTBAND_MEDIA_DIR", "./media"),
+		MediaCacheTTL: envDuration("OUTBAND_MEDIA_CACHE_TTL", time.Hour),
 		OIDC: OIDCConfig{
 			Issuer:       os.Getenv("OUTBAND_OIDC_ISSUER"),
 			ClientID:     os.Getenv("OUTBAND_OIDC_CLIENT_ID"),

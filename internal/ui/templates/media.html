@@ -1,0 +1,21 @@
+{{define "media.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>{{template "head" .}}</head>
+<body>
+  <div class="app">
+    {{template "sidebar" .}}
+    {{template "topbar" .}}
+    <main class="content">
+      <section class="page">
+        <header class="page-head">
+          <h1>Virtual media</h1>
+          <p class="lede">Mount an ISO from the server library as a virtual CD-ROM on the host. One redirection per BMC at a time.</p>
+        </header>
+        {{template "partials/media_panel.html" .}}
+      </section>
+    </main>
+  </div>
+</body>
+</html>
+{{end}}

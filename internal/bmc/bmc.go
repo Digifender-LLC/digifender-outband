@@ -28,6 +28,7 @@ const (
 	FeatureConsole // serial / SOL-style console
 	FeatureIdentity
 	FeatureKVM // video KVM (e.g. AMI Adviser/IVTP)
+	FeatureMedia // virtual CD/ISO redirection (AMI IUSB vmedia)
 )
 
 // FeatureSet is a bitmask of supported features.

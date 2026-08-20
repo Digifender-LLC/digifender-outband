@@ -25,6 +25,7 @@ type Host struct {
 	hasILOKVM   bool
 	kvmPort     int
 	kvmTLS      bool
+	mediaDir    string
 	iloInsecure bool // iLO TLS skip-verify for IRC + Redfish
 	amtTLS      bool // AMT WS-MAN HTTPS
 	// sensorNames maps SDR names → display labels (from inventory sensor_names).
@@ -61,6 +62,19 @@ func (h *Host) HasKVM() bool {
 // HasAMIKVM reports whether AMI Adviser/IVTP KVM is configured.
 func (h *Host) HasAMIKVM() bool {
 	return h != nil && h.hasAMIKVM
+}
+
+// HasAMIMedia reports whether AMI virtual media (IUSB CD-ROM) is available.
+func (h *Host) HasAMIMedia() bool {
+	return h != nil && h.hasAMIKVM && h.mediaDir != ""
+}
+
+// MediaDir returns the configured ISO library directory for this host.
+func (h *Host) MediaDir() string {
+	if h == nil {
+		return ""
+	}
+	return h.mediaDir
 }
 
 // HasAMTKVM reports whether AMT Hardware-KVM is configured.
@@ -108,6 +122,9 @@ func (h *Host) Features() bmc.FeatureSet {
 	if h.HasKVM() {
 		features |= bmc.FeatureSet(bmc.FeatureKVM)
 	}
+	if h.HasAMIMedia() {
+		features |= bmc.FeatureSet(bmc.FeatureMedia)
+	}
 	return applyFeatureFlags(features, h.featureFlags)
 }
 
@@ -149,7 +166,7 @@ type Registry struct {
 // warning. Unknown providers and other factory errors fail Open. If defaultID
 // is empty, the first successfully opened host becomes the default; if
 // defaultID was set but skipped, Open fails.
-func Open(cfgs []config.HostConfig, defaultID string, log *slog.Logger) (*Registry, error) {
+func Open(cfgs []config.HostConfig, defaultID, globalMediaDir string, log *slog.Logger) (*Registry, error) {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -197,6 +214,7 @@ func Open(cfgs []config.HostConfig, defaultID string, log *slog.Logger) (*Regist
 			h.hasAMIKVM = true
 			h.kvmPort = port
 			h.kvmTLS = tls
+			h.mediaDir = cfg.MediaDir(globalMediaDir)
 		}
 		if cfg.HasAMTKVM() {
 			port, tls := cfg.AMTKVMEndpoint()

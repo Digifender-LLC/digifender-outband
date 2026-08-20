@@ -59,6 +59,7 @@ Deep wire notes live in the linked docs; this section is the matrix view only.
 | Identity / power / sensors / SEL | works | RMCP+ via `github.com/bougou/go-ipmi` |
 | SOL console | works | UDP 623; flaky through userland Docker NAT — host networking helps |
 | KVM | works | Proprietary Adviser/IVTP → RFB; JNLP may splice `0x02` into XML |
+| Virtual media (ISO) | works | IUSB CD-ROM on TCP 5120; ISOs from `OUTBAND_MEDIA_DIR`; `/h/{id}/media` |
 
 **Code / quirks:** IVTP dialect and JNLP repair are Tyan-specific; see [kvm-protocol.md](kvm-protocol.md), [bmc-recon.md](bmc-recon.md). Other AMI MegaRAC generations may need codec or framing changes — report them as new rows.
 

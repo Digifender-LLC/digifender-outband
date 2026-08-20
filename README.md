@@ -49,6 +49,7 @@ Open http://127.0.0.1:8080 and sign in with `OUTBAND_UI_PASS`.
 | **SEL** | System event log without a vendor applet |
 | **Console** | Browser SOL via xterm.js (one session per host) |
 | **KVM** | AMI Adviser/IVTP, Intel AMT Hardware-KVM, and HPE iLO IRC → noVNC (RFB bridge) |
+| **Virtual media** | AMI IUSB CD-ROM redirection — mount local ISOs or remote `http(s)` URLs (stream via Range or cache) |
 | **Auth** | Local UI password and/or OIDC SSO; BMC creds stay server-side |
 
 ---
@@ -147,6 +148,8 @@ Session cookie: `outband_session` (12h). BMC credentials never reach the browser
 |-----|--------|
 | `OUTBAND_LISTEN` | Default `:8080` |
 | `OUTBAND_DATA_DIR` | SQLite telemetry dir (default `./data`) |
+| `OUTBAND_MEDIA_DIR` | ISO library for AMI virtual media (default `./media`) |
+| `OUTBAND_MEDIA_CACHE_TTL` | How long URL-downloaded ISOs stay cached after unmount (default `1h`) |
 | `OUTBAND_HOSTS_FILE` | Path to hosts YAML/JSON |
 | `OUTBAND_BMC_PORT` / `OUTBAND_CIPHER_SUITE` | Legacy single-host only |
 | `OUTBAND_KVM_PORT` / `OUTBAND_KVM_TLS` | Legacy path; inventory uses `kvm.*` |

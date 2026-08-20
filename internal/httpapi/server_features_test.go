@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"outband/internal/bmc"
 	"outband/internal/config"
@@ -48,7 +49,7 @@ func TestFeatureGates(t *testing.T) {
 		Client:   featureClient{},
 		// hasAMIKVM/hasAMTKVM left false → HasKVM() == false
 	})
-	srv, err := New(reg, gate, store, slog.Default(), config.OIDCConfig{})
+	srv, err := New(reg, gate, store, slog.Default(), config.OIDCConfig{}, "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +143,7 @@ func TestHostPickerRendered(t *testing.T) {
 		&hosts.Host{ID: "a", Name: "Host A", Provider: "fake", Address: "10.0.0.1", Client: featureClient{}},
 		&hosts.Host{ID: "b", Name: "Host B", Provider: "fake", Address: "10.0.0.2", Client: featureClient{}},
 	)
-	srv, err := New(reg, gate, store, slog.Default(), config.OIDCConfig{})
+	srv, err := New(reg, gate, store, slog.Default(), config.OIDCConfig{}, "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +191,7 @@ func TestInventoryDisablesSensors(t *testing.T) {
 	}
 	h.SetFeatureFlags(&config.FeatureFlags{Sensors: &off})
 	reg := testRegistry(t, h)
-	srv, err := New(reg, gate, store, slog.Default(), config.OIDCConfig{})
+	srv, err := New(reg, gate, store, slog.Default(), config.OIDCConfig{}, "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

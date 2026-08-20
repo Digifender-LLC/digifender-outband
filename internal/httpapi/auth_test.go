@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"outband/internal/bmc"
 	"outband/internal/config"
@@ -43,7 +44,7 @@ func testServer(t *testing.T, pass string) *Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	srv, err := New(testRegistry(t), gate, store, slog.Default(), config.OIDCConfig{})
+	srv, err := New(testRegistry(t), gate, store, slog.Default(), config.OIDCConfig{}, "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

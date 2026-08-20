@@ -4,7 +4,7 @@ Working notes for anyone (person or automated agent) changing this repository.
 
 ## What this is
 
-Outband is a Go + HTMX front-end for BMC management (out-of-band). It exposes dashboard, power, sensors, SEL, browser SOL (xterm.js), and KVM bridged to noVNC via RFB (AMI Adviser/IVTP, Intel AMT Hardware-KVM, and HPE iLO IRC).
+Outband is a Go + HTMX front-end for BMC management (out-of-band). It exposes dashboard, power, sensors, SEL, browser SOL (xterm.js), KVM bridged to noVNC via RFB (AMI Adviser/IVTP, Intel AMT Hardware-KVM, and HPE iLO IRC), and AMI virtual media (ISO mount over IUSB).
 
 Provider internals stay vendor-agnostic (`internal/bmc` + `internal/provider`). Shipping providers: IPMI (`internal/ipmi`), Intel AMT (`internal/amt`), HPE iLO Redfish (`internal/ilo`), Dell iDRAC (`internal/idrac` — Redfish/web/WS-MAN auto per host).
 
@@ -28,7 +28,7 @@ Env prefix is `OUTBAND_*`, binary `outband`.
 | `internal/telemetry` | Host-keyed SQLite store + background poller |
 | `internal/ui` | Templates + Tailwind CSS (`src.css` → `app.css`) + vendored static assets (HTMX, xterm, noVNC) |
 | `internal/amiweb` | AMI MegaRAC web login / JNLP launch args |
-| `internal/kvm` | IVTP session, video decode, HID uplink, RFB bridge |
+| `internal/kvm` | IVTP session, video decode, HID uplink, RFB bridge, AMI IUSB virtual media (`kvm/vmedia`) |
 | `internal/rfb` | Minimal RFB server for noVNC |
 | `docs/` | BMC recon, [hardware matrix](docs/hardware-matrix.md), [AMT](docs/amt.md), [AMT KVM](docs/amt-kvm.md), [iLO](docs/ilo.md), [iLO KVM](docs/ilo-kvm.md), [iDRAC](docs/idrac.md), KVM protocol, provider guide |
 | `scripts/` | Ad-hoc verify/probe tools (`//go:build ignore`) |
@@ -64,7 +64,7 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 - **Match existing style.** Prefer small, focused packages; keep HTMX partials boring and readable; avoid drive-by refactors unrelated to the task.
 - **Providers behind `bmc.Client`.** New vendor support goes through the registry — do not special-case iDRAC/AMT/IPMI/iLO in the HTTP layer.
 - **Unimplemented inventory hosts are skipped.** Stub providers return `provider.ErrNotImplemented`; `hosts.Open` warns and continues. Unknown providers and a stub `OUTBAND_DEFAULT_HOST` still fail startup. At least one usable host is required.
-- **Capabilities drive UI and polling.** Implement `bmc.Capabilities` and omit unsupported bits (`FeatureConsole`, etc.). HTTP nav/routes and the telemetry collector consult `Host.Features()` (client capabilities + inventory KVM + optional `features:` disables); missing features are hidden / skipped (501 if hit directly). IPMI advertises the control plane only; AMT/iLO/iDRAC advertise power/sensors/SEL/identity (no serial console yet). **`FeatureKVM` comes from inventory**: top-level `kvm` = AMI IVTP (IPMI hosts); `amt.kvm` = AMT Hardware-KVM redirection; `ilo.remote_console` (default on for `provider: "ilo"`) = iLO IRC. Do not attach AMI `kvm` to AMT/iLO/iDRAC hosts. Per-host inventory may set `features.sensors: false` (also `sel` / `power` / `console`) to hide menus and skip polls when a platform does not expose that data. SOL is via optional `bmc.Console` (advertised with `FeatureConsole`), not part of `bmc.Client`.
+- **Capabilities drive UI and polling.** Implement `bmc.Capabilities` and omit unsupported bits (`FeatureConsole`, etc.). HTTP nav/routes and the telemetry collector consult `Host.Features()` (client capabilities + inventory KVM + optional `features:` disables); missing features are hidden / skipped (501 if hit directly). IPMI advertises the control plane only; AMT/iLO/iDRAC advertise power/sensors/SEL/identity (no serial console yet). **`FeatureKVM` comes from inventory**: top-level `kvm` = AMI IVTP (IPMI hosts); `amt.kvm` = AMT Hardware-KVM redirection; `ilo.remote_console` (default on for `provider: "ilo"`) = iLO IRC. **`FeatureMedia`** (virtual CD/ISO) follows AMI `kvm` when `OUTBAND_MEDIA_DIR` / `kvm.media_dir` is set. Do not attach AMI `kvm` to AMT/iLO/iDRAC hosts. Per-host inventory may set `features.sensors: false` (also `sel` / `power` / `console`) to hide menus and skip polls when a platform does not expose that data. SOL is via optional `bmc.Console` (advertised with `FeatureConsole`), not part of `bmc.Client`.
 - **Provider-specific inventory options** nest under `ipmi` / `kvm` / `amt` / `ilo` / `idrac` on each host. Do not put vendor knobs on the shared top-level host fields. AMT KVM options nest under `amt.kvm` (not top-level AMI `kvm`).
 - **Host-keyed telemetry.** Store and collectors key by host ID; one background collector runs per usable inventory host. The UI selects a host via `/h/{id}/…` (topbar picker).
 - **One SOL session / one KVM session** per host adapter (KVM bridge). Second clients should get a clear busy/conflict response.
@@ -74,6 +74,7 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 
 - IPMI/SOL is UDP/623 with session state — flaky paths through userland Docker networking are common; host networking can help.
 - AMI KVM on this project’s reference BMC is **not** standard VNC. Video is proprietary IVTP/Adviser; we decode server-side and speak RFB to noVNC. See `docs/kvm-protocol.md` before changing framing, tokens, or the codec.
+- AMI virtual media uses IUSB SCSI on TCP 5120 (CD) with a separate web-session token; data plane lives in `internal/kvm/vmedia`. See `docs/bmc-recon.md` and `scripts/verify_vmedia.go`.
 - AMT KVM uses the redirection listener (16994/16995) + Digest + RFB. See `docs/amt-kvm.md` before changing handshake or encodings.
 - Tyan/AMI JNLP XML can be corrupt (`0x02` spliced into tags). Parsing lives in `internal/amiweb` — preserve the repair path.
 - Do not commit `wireguard-export.zip`, `*.pem`, `*.key`, or `data/*.db*`.

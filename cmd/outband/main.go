@@ -12,6 +12,7 @@ import (
 	"outband/internal/config"
 	"outband/internal/hosts"
 	"outband/internal/httpapi"
+	"outband/internal/kvm"
 	"outband/internal/provider"
 	"outband/internal/telemetry"
 
@@ -35,7 +36,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	registry, err := hosts.Open(cfg.Hosts, cfg.DefaultHost, log)
+	registry, err := hosts.Open(cfg.Hosts, cfg.DefaultHost, cfg.MediaDir, log)
 	if err != nil {
 		log.Error("hosts", "err", err)
 		os.Exit(1)
@@ -55,7 +56,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, err := httpapi.New(registry, gate, store, log, cfg.OIDC)
+	if err := kvm.EnsureMediaDir(cfg.MediaDir); err != nil {
+		log.Warn("media directory", "dir", cfg.MediaDir, "err", err)
+	}
+
+	srv, err := httpapi.New(registry, gate, store, log, cfg.OIDC, cfg.MediaDir, cfg.MediaCacheTTL)
 	if err != nil {
 		log.Error("http server", "err", err)
 		os.Exit(1)
