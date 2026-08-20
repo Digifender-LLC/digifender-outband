@@ -3,21 +3,8 @@
 
   function syncMediaPanel(panel) {
     if (!panel) return;
-    var checked = panel.querySelector('input[name=source]:checked');
-    var mode = checked ? checked.value : 'library';
-    panel.dataset.source = mode;
-
-    panel.querySelectorAll('.media-library-only').forEach(function (el) {
-      el.hidden = mode !== 'library';
-    });
-    panel.querySelectorAll('.media-url-only').forEach(function (el) {
-      el.hidden = mode !== 'url';
-    });
-
-    var iso = panel.querySelector('.media-mount [name=iso]');
-    var url = panel.querySelector('.media-mount [name=url]');
-    if (iso) iso.required = mode === 'library' && !iso.disabled;
-    if (url) url.required = mode === 'url';
+    var mountForm = panel.querySelector('.media-mount');
+    if (!mountForm) return;
   }
 
   function stopMediaPoll() {
@@ -39,6 +26,63 @@
     }, 1000);
   }
 
+  function hideUploadProgress(panel) {
+    if (!panel) return;
+    var box = panel.querySelector('#media-upload-progress');
+    if (box) box.hidden = true;
+  }
+
+  function showUploadProgress(panel, loaded, total) {
+    if (!panel) return;
+    var box = panel.querySelector('#media-upload-progress');
+    var bar = box && box.querySelector('progress');
+    var text = box && box.querySelector('.media-upload-progress-text');
+    if (!box || !bar || !text) return;
+    box.hidden = false;
+    if (total > 0) {
+      bar.max = total;
+      bar.value = loaded;
+      text.textContent = formatBytes(loaded) + ' / ' + formatBytes(total);
+    } else {
+      bar.removeAttribute('max');
+      bar.value = 0;
+      text.textContent = formatBytes(loaded) + ' uploaded';
+    }
+  }
+
+  function formatBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KiB';
+    if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MiB';
+    return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GiB';
+  }
+
+  function uploadWithProgress(form, panel) {
+    var fd = new FormData(form);
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', form.action);
+    xhr.upload.onprogress = function (ev) {
+      showUploadProgress(panel, ev.loaded, ev.total || 0);
+    };
+    xhr.onload = function () {
+      hideUploadProgress(panel);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (typeof htmx !== 'undefined') {
+          htmx.swap(panel, xhr.responseText, { swapStyle: 'outerHTML' });
+        } else {
+          panel.outerHTML = xhr.responseText;
+        }
+        startMediaPoll(document.getElementById('media-panel'));
+      } else if (typeof htmx !== 'undefined') {
+        htmx.swap(panel, xhr.responseText, { swapStyle: 'outerHTML' });
+      }
+    };
+    xhr.onerror = function () {
+      hideUploadProgress(panel);
+    };
+    xhr.send(fd);
+  }
+
   function panelFromEvent(e) {
     if (e.target && e.target.id === 'media-panel') return e.target;
     if (e.target && e.target.querySelector) {
@@ -47,9 +91,14 @@
     return document.getElementById('media-panel');
   }
 
-  document.body.addEventListener('change', function (e) {
-    if (!e.target.matches('#media-panel input[name=source]')) return;
-    syncMediaPanel(document.getElementById('media-panel'));
+  document.body.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!form.classList || !form.classList.contains('media-upload')) return;
+    var panel = form.closest('#media-panel');
+    if (!panel) return;
+    e.preventDefault();
+    stopMediaPoll();
+    uploadWithProgress(form, panel);
   });
 
   document.body.addEventListener('htmx:afterSwap', function (e) {
@@ -59,18 +108,18 @@
   });
 
   document.body.addEventListener('htmx:beforeRequest', function (e) {
-    if (e.target.closest && e.target.closest('#media-panel form')) {
+    if (e.target.closest && e.target.closest('#media-panel form:not(.media-upload)')) {
       stopMediaPoll();
     }
   });
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () {
-      var panel = document.getElementById('media-panel');
-      syncMediaPanel(panel);
-      startMediaPoll(panel);
-    });
+    document.addEventListener('DOMContentLoaded', initMediaPanel);
   } else {
+    initMediaPanel();
+  }
+
+  function initMediaPanel() {
     var panel = document.getElementById('media-panel');
     syncMediaPanel(panel);
     startMediaPoll(panel);

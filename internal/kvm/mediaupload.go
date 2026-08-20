@@ -1,12 +1,16 @@
 package kvm
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// ErrUploadExists indicates the library already contains this ISO name.
+var ErrUploadExists = errors.New("media: ISO already exists in library")
 
 // MaxUploadBytes is the largest ISO accepted via browser upload.
 const MaxUploadBytes int64 = 16 << 30 // 16 GiB
@@ -31,7 +35,7 @@ func SanitizeISOName(name string) (string, error) {
 }
 
 // SaveUpload writes an uploaded ISO into dir using a safe basename.
-func SaveUpload(dir string, r io.Reader, name string, maxBytes int64) (string, error) {
+func SaveUpload(dir string, r io.Reader, name string, maxBytes int64, overwrite bool, onProgress downloadProgressFunc) (string, error) {
 	if maxBytes <= 0 {
 		maxBytes = MaxUploadBytes
 	}
@@ -53,7 +57,9 @@ func SaveUpload(dir string, r io.Reader, name string, maxBytes int64) (string, e
 		return "", fmt.Errorf("media: upload path escapes media directory")
 	}
 	if _, err := os.Stat(dest); err == nil {
-		return "", fmt.Errorf("media: %q already exists in library", name)
+		if !overwrite {
+			return "", fmt.Errorf("%w: %q", ErrUploadExists, name)
+		}
 	} else if !os.IsNotExist(err) {
 		return "", err
 	}
@@ -63,7 +69,15 @@ func SaveUpload(dir string, r io.Reader, name string, maxBytes int64) (string, e
 	if err != nil {
 		return "", err
 	}
-	n, copyErr := io.Copy(f, io.LimitReader(r, maxBytes+1))
+
+	limited := io.LimitReader(r, maxBytes+1)
+	src := io.Reader(limited)
+	if onProgress != nil {
+		onProgress(0, 0)
+		src = &progressReader{r: limited, fn: onProgress}
+	}
+
+	n, copyErr := io.Copy(f, src)
 	closeErr := f.Close()
 	if copyErr != nil {
 		_ = os.Remove(tmp)
@@ -80,6 +94,9 @@ func SaveUpload(dir string, r io.Reader, name string, maxBytes int64) (string, e
 	if err := os.Rename(tmp, dest); err != nil {
 		_ = os.Remove(tmp)
 		return "", err
+	}
+	if onProgress != nil && n > 0 {
+		onProgress(n, n)
 	}
 	return name, nil
 }

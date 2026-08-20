@@ -27,51 +27,99 @@
       {{end}}
     </dl>
     {{else if .Activity.Active}}
-    <p class="subhead">{{if eq .Activity.Phase "mounting"}}Mounting virtual CD-ROM{{else}}Downloading ISO{{end}}</p>
+    <p class="subhead">{{if eq .Activity.Phase "mounting"}}Mounting virtual CD-ROM{{else if eq .Activity.Phase "uploading"}}Uploading ISO{{else}}Downloading ISO{{end}}</p>
     <p class="stat-meta">{{.Activity.Label}}</p>
     {{if gt .Activity.Total 0}}
     <progress class="media-progress-bar" max="{{.Activity.Total}}" value="{{.Activity.Done}}"></progress>
     <p class="field-help">{{formatBytes .Activity.Done}} / {{formatBytes .Activity.Total}} · {{.Activity.Percent}}%</p>
     {{else}}
     <div class="media-progress-bar indeterminate" aria-busy="true"><span></span></div>
-    <p class="field-help">{{formatBytes .Activity.Done}} downloaded{{if eq .Activity.Phase "mounting"}} · connecting to BMC{{end}}</p>
+    <p class="field-help">{{formatBytes .Activity.Done}}{{if eq .Activity.Phase "uploading"}} uploaded{{else if eq .Activity.Phase "mounting"}} · connecting to BMC{{else}} downloaded{{end}}</p>
     {{end}}
+    <form class="media-actions"
+          hx-post="{{.HostBase}}/media/cancel"
+          hx-target="#media-panel"
+          hx-swap="outerHTML">
+      <button class="btn warn" type="submit">Cancel</button>
+    </form>
     {{else}}
     <p class="subhead">Virtual CD-ROM</p>
     <p class="stat-meta">No ISO mounted. Choose a library file, upload one, or mount from a URL.</p>
     {{end}}
   </div>
 
+  <div id="media-upload-progress" class="media-upload-progress" hidden aria-live="polite">
+    <p class="subhead">Uploading to server</p>
+    <progress class="media-progress-bar" value="0" max="100"></progress>
+    <p class="field-help media-upload-progress-text"></p>
+  </div>
+
   {{if .Result}}<p class="ok" role="status">{{.Result}}</p>{{end}}
   {{if .ErrMsg}}<p class="err" role="alert">{{.ErrMsg}}</p>{{end}}
 
   {{if .Status.Mounted}}
-  <form class="media-actions"
-        hx-post="{{.HostBase}}/media/unmount"
-        hx-target="#media-panel"
-        hx-swap="outerHTML"
-        onsubmit="return confirm('Disconnect virtual CD-ROM from the host?')">
-    <button class="btn danger" type="submit">Unmount</button>
-  </form>
+  <div class="media-mounted-actions">
+    <form class="media-actions"
+          hx-post="{{.HostBase}}/media/unmount"
+          hx-target="#media-panel"
+          hx-swap="outerHTML"
+          onsubmit="return confirm('Disconnect virtual CD-ROM from the host?')">
+      <button class="btn danger" type="submit">Unmount</button>
+    </form>
+    {{if .CanBoot}}
+    <form class="media-actions media-boot-actions"
+          hx-post="{{.HostBase}}/media/boot"
+          hx-target="#media-panel"
+          hx-swap="outerHTML">
+      <p class="field-label">Boot from virtual CD (IPMI)</p>
+      <button class="btn primary" name="action" value="boot_power" type="submit">Boot from CD now</button>
+      <button class="btn" name="action" value="boot_once" type="submit">Set next boot to CD</button>
+      <button class="btn" name="action" value="clear_boot" type="submit">Clear boot override</button>
+    </form>
+    {{end}}
+    <p class="field-help"><a href="{{.HostBase}}/kvm">Open KVM</a> to watch the boot process.</p>
+  </div>
   {{else if not .Activity.Active}}
   <div class="panel-grid media-grid">
     <section class="panel media-card">
       <h2 class="subhead">ISO library</h2>
-      <p class="muted media-hint">Stored on the Outband server at <code>{{.MediaDir}}</code>.</p>
+      <p class="muted media-hint">Stored at <code>{{.MediaDir}}</code>.</p>
 
-      {{if .ISOs}}
+      {{if .Library}}
       <ul class="media-list" aria-label="Available ISO images">
-        {{range .ISOs}}<li><code>{{.}}</code></li>{{end}}
+        {{range .Library}}
+        <li class="media-list-row">
+          <div class="media-list-meta">
+            <code>{{.Name}}</code>
+            <span class="muted">{{formatBytes .Size}}</span>
+          </div>
+          <div class="media-list-actions">
+            <form hx-post="{{$.HostBase}}/media/mount"
+                  hx-target="#media-panel"
+                  hx-swap="outerHTML">
+              <input type="hidden" name="source" value="library">
+              <input type="hidden" name="iso" value="{{.Name}}">
+              <button class="btn" type="submit">Mount</button>
+            </form>
+            <form hx-post="{{$.HostBase}}/media/delete"
+                  hx-target="#media-panel"
+                  hx-swap="outerHTML"
+                  onsubmit="return confirm('Delete {{.Name}} from the library?')">
+              <input type="hidden" name="iso" value="{{.Name}}">
+              <button class="btn danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </li>
+        {{end}}
       </ul>
       {{else}}
       <p class="muted">No ISOs yet — upload a file below or mount from a URL.</p>
       {{end}}
 
       <form class="media-upload"
-            hx-post="{{.HostBase}}/media/upload"
-            hx-target="#media-panel"
-            hx-swap="outerHTML"
-            hx-encoding="multipart/form-data">
+            action="{{.HostBase}}/media/upload"
+            method="post"
+            enctype="multipart/form-data">
         <label class="field">
           <span class="field-label">Upload ISO</span>
           <input class="field-input" type="file" name="iso" accept=".iso,application/x-iso9660-image" required>
@@ -80,56 +128,72 @@
           <input type="checkbox" name="mount" value="1" checked>
           Mount after upload
         </label>
+        <label class="field-check">
+          <input type="checkbox" name="overwrite" value="1">
+          Replace existing file
+        </label>
         <button class="btn" type="submit">Upload</button>
       </form>
     </section>
 
     <section class="panel media-card">
-      <h2 class="subhead">Mount from library or URL</h2>
+      <h2 class="subhead">Mount from URL</h2>
       <form class="media-mount"
             hx-post="{{.HostBase}}/media/mount"
             hx-target="#media-panel"
             hx-swap="outerHTML">
-        <fieldset class="field">
-          <legend class="field-label">Source</legend>
-          <div class="segmented">
-            <label><input type="radio" name="source" value="library" checked> Library</label>
-            <label><input type="radio" name="source" value="url"> URL</label>
-          </div>
-        </fieldset>
-
-        <label class="field media-library-only">
-          <span class="field-label">ISO image</span>
-          {{if .ISOs}}
-          <select class="field-input" name="iso" required>
-            {{range .ISOs}}
-            <option value="{{.}}">{{.}}</option>
-            {{end}}
-          </select>
-          {{else}}
-          <select class="field-input" name="iso" disabled>
-            <option value="">Upload an ISO first</option>
-          </select>
-          {{end}}
-        </label>
-
-        <label class="field media-url-only" hidden>
+        <label class="field">
           <span class="field-label">ISO URL</span>
-          <input class="field-input" type="url" name="url" placeholder="https://example.com/install.iso" inputmode="url">
+          <input class="field-input" type="url" name="url" placeholder="https://example.com/install.iso" inputmode="url" required>
+          <input type="hidden" name="source" value="url">
         </label>
 
-        <label class="field media-url-only" hidden>
+        <label class="field">
           <span class="field-label">Delivery</span>
           <select class="field-input" name="delivery">
             <option value="auto" selected>Auto — stream when supported, else cache</option>
             <option value="stream">Stream — HTTP Range (no full download)</option>
             <option value="cache">Cache — download for local reuse</option>
           </select>
-          <span class="field-help">Cache mode downloads the ISO first — progress appears above.</span>
+          <span class="field-help">Cache mode shows download progress before mounting.</span>
         </label>
 
         <button class="btn primary" type="submit">Mount CD-ROM</button>
       </form>
+
+      {{if .Cache}}
+      <h3 class="subhead media-cache-head">Cached downloads</h3>
+      <p class="muted media-hint">Kept for {{.CacheTTL}} after unmount.</p>
+      <ul class="media-list" aria-label="Cached URL ISOs">
+        {{range .Cache}}
+        <li class="media-list-row">
+          <div class="media-list-meta">
+            <span class="media-url">{{.Label}}</span>
+            <span class="muted">{{formatBytes .Size}}{{if .InUse}} · in use{{else if not .RetainUntil.IsZero}} · until {{fmtTime .RetainUntil}}{{end}}</span>
+          </div>
+          <div class="media-list-actions">
+            {{if not .InUse}}
+            <form hx-post="{{$.HostBase}}/media/cache/mount"
+                  hx-target="#media-panel"
+                  hx-swap="outerHTML">
+              <input type="hidden" name="url" value="{{.URL}}">
+              <button class="btn" type="submit">Mount</button>
+            </form>
+            <form hx-post="{{$.HostBase}}/media/cache/purge"
+                  hx-target="#media-panel"
+                  hx-swap="outerHTML"
+                  onsubmit="return confirm('Remove this cached download?')">
+              <input type="hidden" name="url" value="{{.URL}}">
+              <button class="btn danger" type="submit">Purge</button>
+            </form>
+            {{else}}
+            <span class="muted">Mounted</span>
+            {{end}}
+          </div>
+        </li>
+        {{end}}
+      </ul>
+      {{end}}
     </section>
   </div>
   {{end}}

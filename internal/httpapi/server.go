@@ -20,6 +20,7 @@ import (
 	"outband/internal/config"
 	"outband/internal/hosts"
 	"outband/internal/ilo/rc"
+	"outband/internal/ipmi"
 	"outband/internal/kvm"
 	"outband/internal/rfb"
 	"outband/internal/telemetry"
@@ -156,7 +157,7 @@ func (s *Server) routes() {
 		"/metrics", "/api/metrics",
 		"/partials/dashboard",
 		"/console", "/kvm",
-		"/media", "/partials/media",
+	"/media", "/partials/media",
 		"/ws/sol", "/ws/kvm",
 	} {
 		s.mux.HandleFunc("GET "+suffix, s.redirectDefault(suffix))
@@ -192,6 +193,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST "+p+"/media/mount", s.handleMediaMount)
 	s.mux.HandleFunc("POST "+p+"/media/upload", s.handleMediaUpload)
 	s.mux.HandleFunc("POST "+p+"/media/unmount", s.handleMediaUnmount)
+	s.mux.HandleFunc("POST "+p+"/media/cancel", s.handleMediaCancel)
+	s.mux.HandleFunc("POST "+p+"/media/boot", s.handleMediaBoot)
+	s.mux.HandleFunc("POST "+p+"/media/delete", s.handleMediaDelete)
+	s.mux.HandleFunc("POST "+p+"/media/cache/mount", s.handleMediaCacheMount)
+	s.mux.HandleFunc("POST "+p+"/media/cache/purge", s.handleMediaCachePurge)
 }
 
 func (s *Server) redirectDefault(suffix string) http.HandlerFunc {
@@ -881,10 +887,12 @@ type mediaPageData struct {
 	pageData
 	MediaDir  string
 	CacheTTL  string
-	ISOs      []string
+	Library   []kvm.LibraryEntry
+	Cache     []kvm.CacheEntry
 	Status    kvm.MediaStatus
 	Activity  kvm.MediaActivity
 	PollMedia bool
+	CanBoot   bool
 	ErrMsg    string
 	Result    string
 }
@@ -913,13 +921,35 @@ func (s *Server) loadMediaPage(h *hosts.Host) mediaPageData {
 		_ = mgr.TakeActivityError()
 	}
 	d.PollMedia = act.Active
-	isos, err := mgr.ListISOs()
+	lib, err := mgr.ListLibrary()
 	if err != nil {
-		d.ErrMsg = err.Error()
+		if d.ErrMsg == "" {
+			d.ErrMsg = err.Error()
+		}
 	} else {
-		d.ISOs = isos
+		d.Library = lib
 	}
+	cache, err := mgr.ListCache()
+	if err != nil {
+		if d.ErrMsg == "" {
+			d.ErrMsg = err.Error()
+		}
+	} else {
+		d.Cache = cache
+	}
+	d.CanBoot = hostSupportsIPMIBoot(h) && d.Status.Mounted
 	return d
+}
+
+func hostSupportsIPMIBoot(h *hosts.Host) bool {
+	if h == nil || h.Provider != "ipmi" {
+		return false
+	}
+	if !featuresFor(h).Has(bmc.FeaturePower) {
+		return false
+	}
+	_, ok := h.Client.(*ipmi.Adapter)
+	return ok
 }
 
 func (s *Server) handleMedia(w http.ResponseWriter, r *http.Request) {
@@ -1033,27 +1063,18 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	name, err := kvm.SaveUpload(mgr.MediaDir(), file, hdr.Filename, kvm.MaxUploadBytes)
-	if err != nil {
-		d.ErrMsg = err.Error()
+	overwrite := r.FormValue("overwrite") == "1"
+	mountAfter := r.FormValue("mount") == "1"
+	if err := mgr.StartUpload(r.Context(), file, hdr.Filename, mountAfter, overwrite); err != nil {
+		if errors.Is(err, kvm.ErrMediaBusy) {
+			d.ErrMsg = "Virtual media is busy — wait for the current operation to finish"
+		} else {
+			d.ErrMsg = err.Error()
+		}
 		s.render(w, "partials/media_panel.html", d)
 		return
 	}
-	d.Result = fmt.Sprintf("Uploaded %s to library", name)
-	if r.FormValue("mount") == "1" {
-		req := kvm.MountRequest{Source: kvm.MountSourceLibrary, Library: name}
-		if err := mgr.MountRequest(r.Context(), req); err != nil {
-			if errors.Is(err, kvm.ErrMediaBusy) {
-				d.ErrMsg = "Uploaded, but another ISO is already mounted"
-			} else {
-				d.ErrMsg = fmt.Sprintf("Uploaded %s, but mount failed: %v", name, err)
-			}
-		} else {
-			d.Result = fmt.Sprintf("Uploaded and mounted %s", name)
-		}
-	}
-	d.Status = mgr.Status()
-	d.ISOs, _ = mgr.ListISOs()
+	d = s.loadMediaPage(h)
 	s.render(w, "partials/media_panel.html", d)
 }
 
@@ -1080,12 +1101,199 @@ func (s *Server) handleMediaUnmount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mgr := s.mediaManager(h)
-	d := s.loadMediaPage(h)
 	if mgr != nil {
 		mgr.Unmount()
-		d.Result = "Virtual CD-ROM disconnected"
-		d.Status = mgr.Status()
-		d.ISOs, _ = mgr.ListISOs()
 	}
+	d := s.loadMediaPage(h)
+	d.Result = "Virtual CD-ROM disconnected"
+	s.render(w, "partials/media_panel.html", d)
+}
+
+func (s *Server) handleMediaCancel(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	mgr := s.mediaManager(h)
+	d := s.loadMediaPage(h)
+	if mgr != nil {
+		mgr.Cancel()
+		d = s.loadMediaPage(h)
+		d.Result = "Cancelled"
+	}
+	s.render(w, "partials/media_panel.html", d)
+}
+
+func (s *Server) handleMediaBoot(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	d := s.loadMediaPage(h)
+	if !d.CanBoot {
+		d.ErrMsg = "Boot override requires an IPMI host with a mounted virtual CD"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	ipmiClient, ok := h.Client.(*ipmi.Adapter)
+	if !ok {
+		d.ErrMsg = "Boot override is only supported on IPMI hosts"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	ctx := r.Context()
+	action := r.FormValue("action")
+	var result, errMsg string
+	switch action {
+	case "boot_once":
+		if err := ipmiClient.SetBootCDROMOnce(ctx); err != nil {
+			errMsg = err.Error()
+		} else {
+			result = "Next boot will use CD-ROM once"
+		}
+	case "boot_power":
+		if err := ipmiClient.SetBootCDROMOnce(ctx); err != nil {
+			errMsg = err.Error()
+			break
+		}
+		ps, err := h.Client.PowerStatus(ctx)
+		if err != nil {
+			errMsg = err.Error()
+			break
+		}
+		power := bmc.PowerCycle
+		if !ps.IsOn {
+			power = bmc.PowerOn
+		}
+		if err := h.Client.PowerControl(ctx, power); err != nil {
+			errMsg = err.Error()
+		} else {
+			result = "Boot override set and host power cycled"
+		}
+	case "clear_boot":
+		if err := ipmiClient.ClearBootOverride(ctx); err != nil {
+			errMsg = err.Error()
+		} else {
+			result = "Boot override cleared"
+		}
+	default:
+		errMsg = "Unknown boot action"
+	}
+	d = s.loadMediaPage(h)
+	if errMsg != "" {
+		d.ErrMsg = errMsg
+	}
+	if result != "" {
+		d.Result = result
+	}
+	s.render(w, "partials/media_panel.html", d)
+}
+
+func (s *Server) handleMediaDelete(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	mgr := s.mediaManager(h)
+	d := s.loadMediaPage(h)
+	if mgr == nil {
+		d.ErrMsg = "Virtual media not available"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	if mgr.Busy() {
+		d.ErrMsg = "Virtual media is busy"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	name := r.FormValue("iso")
+	if err := mgr.DeleteISO(name); err != nil {
+		d.ErrMsg = err.Error()
+	} else {
+		d.Result = fmt.Sprintf("Removed %s from library", name)
+	}
+	d = s.loadMediaPage(h)
+	s.render(w, "partials/media_panel.html", d)
+}
+
+func (s *Server) handleMediaCacheMount(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	mgr := s.mediaManager(h)
+	d := s.loadMediaPage(h)
+	if mgr == nil || mgr.Busy() {
+		d.ErrMsg = "Virtual media not available or busy"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	url := strings.TrimSpace(r.FormValue("url"))
+	req, err := kvm.ParseMountRequest("url", "", url, "cache")
+	if err != nil {
+		d.ErrMsg = err.Error()
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	async, err := mgr.StartMountRequest(r.Context(), req)
+	if err != nil {
+		d.ErrMsg = err.Error()
+	} else if !async {
+		d.Result = "Mounted cached ISO"
+	}
+	d = s.loadMediaPage(h)
+	s.render(w, "partials/media_panel.html", d)
+}
+
+func (s *Server) handleMediaCachePurge(w http.ResponseWriter, r *http.Request) {
+	h, ok := s.resolveHost(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireFeature(w, h, bmc.FeatureMedia, "Virtual media") {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	mgr := s.mediaManager(h)
+	d := s.loadMediaPage(h)
+	if mgr == nil {
+		d.ErrMsg = "Virtual media not available"
+		s.render(w, "partials/media_panel.html", d)
+		return
+	}
+	url := strings.TrimSpace(r.FormValue("url"))
+	if err := mgr.PurgeCacheEntry(url); err != nil {
+		d.ErrMsg = err.Error()
+	} else {
+		d.Result = "Removed cached download"
+	}
+	d = s.loadMediaPage(h)
 	s.render(w, "partials/media_panel.html", d)
 }

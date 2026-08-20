@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/url"
@@ -204,6 +205,98 @@ func (m *MediaManager) StartMountRequest(ctx context.Context, req MountRequest) 
 		return false, m.MountRequest(ctx, req)
 	}
 	return true, m.startAsyncMount(ctx, req)
+}
+
+// Cancel stops an in-flight cache download or upload.
+func (m *MediaManager) Cancel() {
+	m.mu.Lock()
+	cancel := m.mountCancel
+	m.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// ListLibrary returns ISO library entries for this manager.
+func (m *MediaManager) ListLibrary() ([]LibraryEntry, error) {
+	return ListLibrary(m.mediaDir)
+}
+
+// DeleteISO removes an ISO from the library.
+func (m *MediaManager) DeleteISO(name string) error {
+	return DeleteLibraryISO(m.mediaDir, name)
+}
+
+// ListCache returns cached URL ISOs.
+func (m *MediaManager) ListCache() ([]CacheEntry, error) {
+	return m.cache.List()
+}
+
+// PurgeCacheEntry removes a cached URL ISO when not in use.
+func (m *MediaManager) PurgeCacheEntry(url string) error {
+	return m.cache.PurgeEntry(url)
+}
+
+// StartUpload saves an ISO asynchronously and optionally mounts it.
+func (m *MediaManager) StartUpload(parent context.Context, r io.Reader, filename string, mountAfter, overwrite bool) error {
+	m.mu.Lock()
+	if m.stop != nil || m.activity.Active {
+		m.mu.Unlock()
+		return ErrMediaBusy
+	}
+	ctx, cancel := context.WithCancel(parent)
+	m.mountCancel = cancel
+	label, _ := SanitizeISOName(filename)
+	m.activity = MediaActivity{
+		Active: true,
+		Phase:  "uploading",
+		Label:  label,
+	}
+	m.mu.Unlock()
+
+	go func() {
+		defer cancel()
+
+		onProgress := func(done, total int64) {
+			m.mu.Lock()
+			m.activity.Done = done
+			if total > 0 {
+				m.activity.Total = total
+			}
+			m.mu.Unlock()
+		}
+
+		name, err := SaveUpload(m.mediaDir, r, filename, MaxUploadBytes, overwrite, onProgress)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				m.clearActivity()
+				return
+			}
+			m.setActivityError(err)
+			return
+		}
+
+		if !mountAfter {
+			m.clearActivity()
+			return
+		}
+
+		m.mu.Lock()
+		m.activity.Phase = "mounting"
+		m.mu.Unlock()
+
+		req := MountRequest{Source: MountSourceLibrary, Library: name}
+		if err := m.MountRequest(ctx, req); err != nil {
+			if errors.Is(err, context.Canceled) {
+				m.clearActivity()
+				return
+			}
+			m.setActivityError(err)
+			return
+		}
+		m.clearActivity()
+	}()
+	return nil
 }
 
 func (m *MediaManager) startAsyncMount(parent context.Context, req MountRequest) error {

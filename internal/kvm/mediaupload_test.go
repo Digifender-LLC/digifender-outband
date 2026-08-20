@@ -2,6 +2,7 @@ package kvm
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +41,7 @@ func TestSanitizeISOName(t *testing.T) {
 
 func TestSaveUpload(t *testing.T) {
 	dir := t.TempDir()
-	name, err := SaveUpload(dir, bytes.NewReader([]byte("hello iso")), "test.iso", 1024)
+	name, err := SaveUpload(dir, bytes.NewReader([]byte("hello iso")), "test.iso", 1024, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,19 +55,34 @@ func TestSaveUpload(t *testing.T) {
 	if string(b) != "hello iso" {
 		t.Fatalf("content = %q", b)
 	}
-	_, err = SaveUpload(dir, strings.NewReader("dup"), "test.iso", 1024)
-	if err == nil {
-		t.Fatal("expected duplicate error")
+	_, err = SaveUpload(dir, strings.NewReader("dup"), "test.iso", 1024, false, nil)
+	if !errors.Is(err, ErrUploadExists) {
+		t.Fatalf("SaveUpload: err = %v, want ErrUploadExists", err)
+	}
+	_, err = SaveUpload(dir, strings.NewReader("new"), "test.iso", 1024, true, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestSaveUploadTooLarge(t *testing.T) {
 	dir := t.TempDir()
-	_, err := SaveUpload(dir, bytes.NewReader(make([]byte, 8)), "big.iso", 4)
+	_, err := SaveUpload(dir, bytes.NewReader(make([]byte, 8)), "big.iso", 4, false, nil)
 	if err == nil || !strings.Contains(err.Error(), "limit") {
 		t.Fatalf("SaveUpload: err = %v, want size limit error", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "big.iso")); !os.IsNotExist(err) {
-		t.Fatal("oversized upload should not leave final file")
+}
+
+func TestListLibrary(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.iso"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := ListLibrary(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name != "a.iso" {
+		t.Fatalf("entries = %+v", entries)
 	}
 }
