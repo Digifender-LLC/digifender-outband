@@ -1153,6 +1153,7 @@ func (s *Server) handleMediaBoot(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	action := r.FormValue("action")
+	mgr := s.mediaManager(h)
 	var result, errMsg string
 	switch action {
 	case "boot_once":
@@ -1162,61 +1163,24 @@ func (s *Server) handleMediaBoot(w http.ResponseWriter, r *http.Request) {
 			result = "Next boot will use CD-ROM once (UEFI preferred)"
 		}
 	case "boot_power":
-		if err := setBootCDROMBestEffort(ctx, ipmiClient); err != nil {
-			errMsg = err.Error()
+		if mgr == nil {
+			errMsg = "Virtual media not available"
 			break
 		}
-		ps, err := h.Client.PowerStatus(ctx)
-		if err != nil {
-			errMsg = err.Error()
-			break
-		}
-		power := bmc.PowerCycle
-		if !ps.IsOn {
-			power = bmc.PowerOn
-		}
-		if err := h.Client.PowerControl(ctx, power); err != nil {
+		if err := s.cdBootWithRemount(ctx, h, mgr, ipmiClient); err != nil {
 			errMsg = err.Error()
 		} else {
-			result = "Boot override set and host power cycled — open KVM to confirm boot"
+			result = "Virtual CD remounted, boot override set, host powering on — open KVM to confirm"
 		}
 	case "cold_boot":
-		if !d.Status.Mounted {
-			errMsg = "Mount an ISO before cold boot"
+		if mgr == nil {
+			errMsg = "Virtual media not available"
 			break
 		}
-		ps, err := h.Client.PowerStatus(ctx)
-		if err != nil {
-			errMsg = err.Error()
-			break
-		}
-		if ps.IsOn {
-			if err := h.Client.PowerControl(ctx, bmc.PowerOff); err != nil {
-				errMsg = err.Error()
-				break
-			}
-			select {
-			case <-ctx.Done():
-				errMsg = ctx.Err().Error()
-			case <-time.After(5 * time.Second):
-			}
-		}
-		if err := setBootCDROMBestEffort(ctx, ipmiClient); err != nil {
-			errMsg = err.Error()
-			break
-		}
-		select {
-		case <-ctx.Done():
-			errMsg = ctx.Err().Error()
-		case <-time.After(2 * time.Second):
-		}
-		if errMsg != "" {
-			break
-		}
-		if err := h.Client.PowerControl(ctx, bmc.PowerOn); err != nil {
+		if err := s.cdBootWithRemount(ctx, h, mgr, ipmiClient); err != nil {
 			errMsg = err.Error()
 		} else {
-			result = "Cold boot started with CD-ROM override — watch KVM during POST"
+			result = "Cold boot: virtual CD remounted before POST — watch KVM and Host reads"
 		}
 	case "clear_boot":
 		if err := ipmiClient.ClearBootOverride(ctx); err != nil {
@@ -1242,6 +1206,79 @@ func setBootCDROMBestEffort(ctx context.Context, c *ipmi.Adapter) error {
 		return nil
 	}
 	return c.SetBootCDROMOnce(ctx)
+}
+
+// cdBootWithRemount powers off, remounts virtual media, sets a CD boot override, and
+// powers on. AMI BMCs drop the IUSB session when the host powers off, so mounting
+// must happen after power-off and before POST.
+func (s *Server) cdBootWithRemount(_ context.Context, h *hosts.Host, mgr *kvm.MediaManager, ipmiClient *ipmi.Adapter) error {
+	bootCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	req, err := mgr.SnapshotMount()
+	if err != nil {
+		return err
+	}
+	mgr.Unmount()
+
+	ps, err := h.Client.PowerStatus(bootCtx)
+	if err != nil {
+		return err
+	}
+	if ps.IsOn {
+		if err := h.Client.PowerControl(bootCtx, bmc.PowerOff); err != nil {
+			return err
+		}
+		if err := waitChassisPower(bootCtx, h.Client, false, 20*time.Second); err != nil {
+			return err
+		}
+	}
+
+	if err := mgr.MountRequest(bootCtx, req); err != nil {
+		return fmt.Errorf("remount virtual CD after power off: %w", err)
+	}
+
+	select {
+	case <-bootCtx.Done():
+		mgr.Unmount()
+		return bootCtx.Err()
+	case <-time.After(8 * time.Second):
+	}
+
+	if err := setBootCDROMBestEffort(bootCtx, ipmiClient); err != nil {
+		mgr.Unmount()
+		return err
+	}
+
+	if err := h.Client.PowerControl(bootCtx, bmc.PowerOn); err != nil {
+		return err
+	}
+	return waitChassisPower(bootCtx, h.Client, true, 20*time.Second)
+}
+
+func waitChassisPower(ctx context.Context, client bmc.Client, wantOn bool, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		ps, err := client.PowerStatus(ctx)
+		if err != nil {
+			return err
+		}
+		if ps.IsOn == wantOn {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			state := "off"
+			if wantOn {
+				state = "on"
+			}
+			return fmt.Errorf("timed out waiting for host power %s", state)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
 }
 
 func (s *Server) handleMediaDelete(w http.ResponseWriter, r *http.Request) {

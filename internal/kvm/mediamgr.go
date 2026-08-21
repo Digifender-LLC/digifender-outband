@@ -50,6 +50,7 @@ type MediaManager struct {
 	stop        func()
 	statsFn     func() int64
 	status      MediaStatus
+	lastMount   MountRequest
 	activity    MediaActivity
 	mountCancel context.CancelFunc
 }
@@ -453,6 +454,7 @@ func (m *MediaManager) mountBacking(ctx context.Context, backing mediaBacking, l
 		URL:      url,
 		Delivery: delivery,
 	}
+	m.lastMount = mountRequestFromStatus(m.status)
 	m.mu.Unlock()
 
 	m.log.Info("virtual media mounted", "iso", label, "source", source, "size", backing.Size())
@@ -513,6 +515,37 @@ func (m *MediaManager) openURLCache(ctx context.Context, rawURL string, onDownlo
 		return nil, "", "", "", nil, err
 	}
 	return fr, urlLabel(rawURL), "url-cache", "cache", release, nil
+}
+
+// SnapshotMount returns the request needed to remount the current image.
+func (m *MediaManager) SnapshotMount() (MountRequest, error) {
+	m.mu.Lock()
+	req := m.lastMount
+	m.mu.Unlock()
+	if req.Source == "" {
+		return MountRequest{}, fmt.Errorf("media: mount an ISO before booting from CD")
+	}
+	return req, nil
+}
+
+func mountRequestFromStatus(st MediaStatus) MountRequest {
+	switch st.Source {
+	case "library":
+		return MountRequest{Source: MountSourceLibrary, Library: st.ISO}
+	case "url-stream":
+		return MountRequest{Source: MountSourceURL, URL: st.URL, Delivery: DeliveryStream}
+	case "url-cache":
+		return MountRequest{Source: MountSourceURL, URL: st.URL, Delivery: DeliveryCache}
+	default:
+		if st.URL != "" {
+			d := DeliveryAuto
+			if st.Delivery != "" {
+				d = DeliveryMode(st.Delivery)
+			}
+			return MountRequest{Source: MountSourceURL, URL: st.URL, Delivery: d}
+		}
+		return MountRequest{Source: MountSourceLibrary, Library: st.ISO}
+	}
 }
 
 func urlLabel(raw string) string {

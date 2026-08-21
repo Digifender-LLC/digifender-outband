@@ -38,7 +38,8 @@ func buildCDEmulator(backing vmedia.Reader) (*vmedia.Device, *vmedia.Cache) {
 }
 
 // attachVMedia opens the device's vmedia port using a web session token and runs the
-// SCSI emulation loop against backing until ctx is cancelled.
+// SCSI emulation loop against backing until stop is called.
+// ctx applies to connect/auth only; the serve loop is detached from HTTP request lifetimes.
 // stats reports bytes served to the host (READ data); nil when attach fails.
 func attachVMedia(ctx context.Context, host string, kind string, token string, args map[string]string, backing vmedia.Reader) (stop func(), stats func() int64, err error) {
 	port, err := vmediaPort(kind, args)
@@ -57,15 +58,15 @@ func attachVMedia(ctx context.Context, host string, kind string, token string, a
 	}
 
 	emu, cache := buildCDEmulator(backing)
-	mctx, mcancel := context.WithCancel(ctx)
+	serveCtx, serveCancel := context.WithCancel(context.Background())
 	go func() {
-		if err := sess.Serve(mctx, emu); err != nil && mctx.Err() == nil {
+		if err := sess.Serve(serveCtx, emu); err != nil && serveCtx.Err() == nil {
 			log.Printf("vmedia: %s session ended: %v", kind, err)
 		}
 	}()
 
 	stop = func() {
-		mcancel()
+		serveCancel()
 		_ = sess.Close()
 		if cache != nil {
 			s := cache.Stats()
