@@ -53,7 +53,7 @@
 
           meta = with pkgs.lib; {
             description = "Browser BMC UI (IPMI, AMT, …)";
-            homepage = "https://github.com/TheMinecraftGuyGuru/outband";
+            homepage = "https://github.com/Digifender-LLC/digifender-outband";
             license = licenses.mit;
             mainProgram = "outband";
             platforms = platforms.unix;

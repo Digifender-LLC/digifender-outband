@@ -110,9 +110,9 @@ If UDP/IPMI is flaky through userland Docker networking, try `network_mode: host
 Multi-arch (`linux/amd64`, `linux/arm64`):
 
 ```bash
-docker pull ghcr.io/theminecraftguyguru/outband:alpha
+docker pull ghcr.io/digifender-llc/digifender-outband:alpha
 # or a release tag:
-docker pull ghcr.io/theminecraftguyguru/outband:v0.1.0-alpha.3
+docker pull ghcr.io/digifender-llc/digifender-outband:v0.1.0-alpha.3
 ```
 
 ### Nix
@@ -120,7 +120,7 @@ docker pull ghcr.io/theminecraftguyguru/outband:v0.1.0-alpha.3
 ```bash
 nix build && ./result/bin/outband
 nix run . --                  # needs OUTBAND_* env
-nix run github:TheMinecraftGuyGuru/outband/v0.1.0-alpha.3
+nix run github:Digifender-LLC/digifender-outband/v0.1.0-alpha.3
 ```
 
 Dev shell: `nix develop` (Go 1.25 + Node for CSS). Refresh `vendorHash` in `flake.nix` when Go deps change.
