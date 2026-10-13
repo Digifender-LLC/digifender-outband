@@ -92,3 +92,18 @@ Verification helpers under `scripts/` are not part of the main module build (`//
 - iDRAC console / KVM; AMT SOL; iLO VSP serial
 - In-process HTTPS termination (reverse proxy or LAN trust)
 - Committing private network or credential material
+
+## Cursor Cloud specific instructions
+
+- **No real BMC is reachable in the cloud VM.** Standard commands live in the `## Run and test` section above; the notes here only cover what is non-obvious when there is no live hardware.
+- **The app still starts and serves the UI without a BMC** — IPMI connections are lazy (`internal/ipmi`), so a placeholder inventory host is enough to exercise login and host-scoped navigation. Example run:
+  ```bash
+  export OUTBAND_UI_PASS=devpass
+  export OUTBAND_DEFAULT_HOST=lab
+  export OUTBAND_HOSTS='[{"id":"lab","name":"Lab BMC","provider":"ipmi","host":"127.0.0.1","port":623,"user":"root","password":"x"}]'
+  go run ./cmd/outband   # open http://127.0.0.1:8080, log in with OUTBAND_UI_PASS
+  ```
+- **Expected noise:** the per-host telemetry collector logs continuous `WARN msg="poll sensors/power" ... connection refused` because the placeholder BMC is unreachable. This is normal in the cloud and is **not** a startup/build failure — dashboard/power/sensors pages render with "No … data yet" / "Waiting for collector…" placeholders.
+- **Lint = `go vet ./...`** (there is no golangci-lint config or lint CI; the only workflow, `.github/workflows/container.yml`, just builds the release image on tags).
+- **`go test ./...` needs no live BMC** and passes offline (already stated in conventions).
+- **CSS:** `npm run build:css` regenerates `internal/ui/static/css/app.css` deterministically; only rebuild/commit it when you edit `src.css` (Go/Docker builds embed the committed file and do not run Node).
